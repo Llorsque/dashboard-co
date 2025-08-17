@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sport Fryslân Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">SF</div>
+        <div class="brand-text">
+          <strong>Sport Fryslân</strong><br>
+          <span>Data Dashboard</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="#/dashboard" class="nav-link" data-route="dashboard">Dashboard</a>
+        <a href="#/compare" class="nav-link" data-route="compare">Vergelijker</a>
+        <a href="#/map" class="nav-link" data-route="map">Kaart</a>
+        <a href="#/help" class="nav-link" data-route="help">Uitleg</a>
+        <a href="#/settings" class="nav-link" data-route="settings">Instellingen</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="resetApp" class="btn btn-ghost">Reset app</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="file-upload">
+          <label for="fileInput" class="btn">Upload data (.xlsx / .csv)</label>
+          <input id="fileInput" type="file" accept=".xlsx,.csv" />
+          <div id="datasetName" class="dataset-name">Geen dataset geladen</div>
+        </div>
+
+        <div class="filters">
+          <select id="filterField"></select>
+          <input id="filterValue" type="text" placeholder="Filterwaarde..." />
+          <button id="addFilter" class="btn">+ Filter</button>
+          <button id="clearFilters" class="btn btn-ghost">Reset filters</button>
+        </div>
+      </header>
+
+      <section id="view" class="view"></section>
+
+      <footer class="footer">
+        <span>Client-side • Geen backend • © 2025</span>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Libs -->
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
