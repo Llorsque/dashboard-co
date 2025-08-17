@@ -78,10 +78,3 @@ input[type=file]{display:none}
 .sel-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto;padding:4px 0}
 .sel-item{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;box-shadow:var(--shadow)}
 .sel-empty{color:var(--muted);font-size:13px}
-
-.section-title-row{display:flex; align-items:center; gap:12px; justify-content:space-between; margin-bottom:8px}
-.section-title-row .btn{margin-left:auto}
-
-.toolbar{display:flex; justify-content:flex-end; margin:8px 0}
-
-.section-title-row .btn-ghost{margin-right:8px}

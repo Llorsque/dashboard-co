@@ -2634,11 +2634,7 @@ function renderDashboard(mount){
 
   // Selection list card
   const card3 = document.createElement('div'); card3.className='card';
-  const titleRow = document.createElement('div'); titleRow.className='section-title-row';
-const t3 = document.createElement('div'); t3.className='section-title'; t3.id='selTitle'; t3.textContent='Selectie';
-const dl = document.createElement('button'); dl.className='btn'; dl.id='btnExportSel'; dl.textContent='Download selectie (CSV)'; dl.addEventListener('click', exportSelectionCSV);
-const dlx = document.createElement('button'); dlx.className='btn btn-ghost'; dlx.id='btnExportSelX'; dlx.textContent='Download selectie (XLSX)'; dlx.addEventListener('click', exportSelectionXLSX);
-titleRow.appendChild(t3); titleRow.appendChild(dlx); titleRow.appendChild(dl); card3.appendChild(titleRow);
+  const t3 = document.createElement('div'); t3.className='section-title'; t3.id='selTitle'; t3.textContent='Selectie'; card3.appendChild(t3);
   const list = document.createElement('div'); list.className='sel-list'; list.id='selList'; card3.appendChild(list);
   mount.appendChild(card3);
 
@@ -2734,18 +2730,85 @@ function getGemeenteName(props){
 }
 
 /** Map */
+
 function renderMap(mount){
   const wrapper = document.createElement('div'); wrapper.className='card';
-  const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle'; title.textContent='Kaart' + titleSuffix(); wrapper.appendChild(title);
-  const mapCount = document.createElement('div'); mapCount.className='sub'; mapCount.id='mapCount'; wrapper.appendChild(mapCount);
+  const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle'; title.textContent='Kaart' + (typeof titleSuffix==='function'? titleSuffix() : ''); wrapper.appendChild(title);
+  const ctrl = document.createElement('div'); ctrl.className='flex'; ctrl.style.marginBottom='8px';
+  const mapCount = document.createElement('div'); mapCount.className='sub'; mapCount.id='mapCount'; ctrl.appendChild(mapCount);
+  const gap = document.createElement('div'); gap.style.flex='1'; ctrl.appendChild(gap);
+  wrapper.appendChild(ctrl);
   const mapWrap = document.createElement('div'); mapWrap.className='tile equal'; mapWrap.style.height='64vh'; mapWrap.id='map'; wrapper.appendChild(mapWrap);
-    const hard = document.createElement('button'); hard.className='btn btn-ghost'; hard.textContent='Volledige reset (cache & instellingen)'; hard.addEventListener('click', ()=>{ localStorage.clear(); location.reload(); }); wrapper.appendChild(hard);
+  const hard = document.createElement('button'); hard.className='btn btn-ghost'; hard.textContent='Herlaad kaart'; hard.addEventListener('click', ()=>navigate('#/map')); wrapper.appendChild(hard);
   mount.appendChild(wrapper);
 
-  // Ensure data exists and apply active dropdown filters from dashboard
-  if(!AppState.rows.length && AppState.usingDummy){
-    AppState.rows = DummyRows.slice(); AppState.schema = inferSchema(AppState.rows);
+  // Source + filters (fallback if AppState.filtered not populated)
+  let rows = [];
+  try{
+    if(typeof getFilteredRowsFallback==='function') rows = getFilteredRowsFallback();
+    else {
+      const src = (AppState.rows && AppState.rows.length) ? AppState.rows : (typeof DummyRows!=='undefined'? DummyRows: []);
+      const f = (FixedFilters||{});
+      rows = src.filter(r =>
+        (!f.gemeente || r.gemeente===f.gemeente) &&
+        (!f.sportbond || r.sportbond===f.sportbond) &&
+        (!f.sport || r.sport===f.sport) &&
+        (!f.doelgroep || r.doelgroep===f.doelgroep)
+      );
+    }
+  }catch(e){ rows = (AppState.rows && AppState.rows.length) ? AppState.rows : (typeof DummyRows!=='undefined'? DummyRows: []); }
+
+  const map = L.map('map').setView([53.1,5.8], 8);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+
+  // Determine lat/lon keys flexibly
+  const sample = rows[0] || (AppState.rows && AppState.rows[0]) || null;
+  const latK = (AppState.mapping && AppState.mapping.latitude) || findKeyInsensitive(sample, ['latitude','lat','y','breedtegraad']);
+  const lonK = (AppState.mapping && AppState.mapping.longitude) || findKeyInsensitive(sample, ['longitude','lon','lng','x','lengtegraad']);
+
+  // Build points, coercing NL decimals if needed
+  const pts = rows.map(r => {
+    const lat = coerceNumberNL(latK ? r[latK] : r.latitude);
+    const lon = coerceNumberNL(lonK ? r[lonK] : r.longitude);
+    return { lat, lon, row:r };
+  }).filter(p => isFinite(p.lat) && isFinite(p.lon));
+
+  const countEl = document.getElementById('mapCount'); if(countEl){ countEl.textContent = `${pts.length} locaties gevonden`; }
+
+  if(pts.length === 0){
+    L.popup({ closeButton:false, autoClose:false }).setLatLng([53.2,5.8]).setContent('Geen resultaten met deze filters').openOn(map);
+    return;
   }
+
+  const markers = pts.map(p => {
+    const m = L.marker([p.lat, p.lon]).addTo(map);
+    if(typeof buildPopup === 'function'){ m.bindPopup(buildPopup(p.row), {maxWidth: 360}); }
+    else { const nm = p.row && p.row.naam ? p.row.naam : 'Vereniging'; m.bindPopup(`<strong>${nm}</strong>`); }
+    return m;
+  });
+  const group = L.featureGroup(markers); map.fitBounds(group.getBounds().pad(0.25));
+
+  // Optional municipality boundaries (non-interactive)
+  let boundaryLayer = null;
+  (async function drawBoundaries(){
+    try{
+      const res = await fetch('data/friesland-gemeenten.geojson', {cache:'no-store'});
+      if(!res.ok) return;
+      const gj = await res.json();
+      const activeGem = (FixedFilters && FixedFilters.gemeente) ? FixedFilters.gemeente : null;
+      boundaryLayer = L.geoJSON(gj, {
+        interactive:false,
+        style: feature => {
+          const props = feature.properties || {};
+          const name = (props.GM_NAAM || props.Gemeentenaam || props.gemeente || props.name || props.NAAM || '').toString();
+          const isActive = activeGem && name && name.toLowerCase() === activeGem.toLowerCase();
+          return { color: isActive ? getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#52E8E8' : '#6b7280', weight: isActive ? 3 : 1, opacity: 0.9, fill:false };
+        }
+      }).addTo(map);
+    }catch(e){ /* ignore */ }
+  })();
+}
+
   applyDropdownFilters(); // sets AppState.filtered based on FixedFilters
   const rows = AppState.filtered && AppState.filtered.length ? AppState.filtered : [];
 
@@ -2806,71 +2869,6 @@ function buildPopup(row){
   </div>`;
 }
 
-
-/** --- Export helpers --- */
-function slug(v){
-  return String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').replace(/^_+|_+$/g,'').toLowerCase();
-}
-function csvEscape(val){
-  if(val===null||val===undefined) return '';
-  const s = String(val);
-  if(/[",\n]/.test(s)){
-    return '"' + s.replace(/"/g,'""') + '"';
-  }
-  return s;
-}
-function buildCSV(rows){
-  if(!rows || !rows.length){
-    return 'naam,gemeente,sportbond,sport,doelgroep,leden,vrijwilligers,contributie,latitude,longitude';
-  }
-  const pref = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
-  const keySet = new Set();
-  rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
-  const rest = Array.from(keySet).filter(k => !pref.includes(k));
-  const headers = pref.concat(rest);
-  const headerLine = headers.join(',');
-  const lines = rows.map(r => headers.map(h => csvEscape(r[h])).join(','));
-  return [headerLine].concat(lines).join('\r\n');
-}
-function downloadBlob(content, filename, type='text/csv;charset=utf-8;'){
-  const blob = new Blob([content], {type});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
-}
-function getFilteredRowsFallback(){
-  if(Array.isArray(AppState.filtered)) return AppState.filtered;
-  const rows = Array.isArray(AppState.rows) && AppState.rows.length ? AppState.rows : (typeof DummyRows!=='undefined'? DummyRows: []);
-  // Apply FixedFilters if present
-  const f = (FixedFilters||{});
-  return rows.filter(r =>
-    (!f.gemeente || r.gemeente===f.gemeente) &&
-    (!f.sportbond || r.sportbond===f.sportbond) &&
-    (!f.sport || r.sport===f.sport) &&
-    (!f.doelgroep || r.doelgroep===f.doelgroep)
-  );
-}
-function exportSelectionCSV(){
-  try{
-    if(typeof applyDropdownFilters==='function'){ applyDropdownFilters(); }
-  }catch(e){ /* ignore */ }
-  const rows = getFilteredRowsFallback();
-  const parts = [];
-  if(FixedFilters && FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
-  if(FixedFilters && FixedFilters.sportbond) parts.push(FixedFilters.sportbond);
-  if(FixedFilters && FixedFilters.sport) parts.push(FixedFilters.sport);
-  if(FixedFilters && FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
-  const d = new Date();
-  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  const fname = `selectie_${y}-${m}-${dd}` + (parts.length?`_${slug(parts.join('_'))}`:'') + `.csv`;
-  const csv = buildCSV(rows);
-  downloadBlob(csv, fname);
-}
-
 /** Help */
 function renderHelp(mount){
   const card = document.createElement('div'); card.className='card stack';
@@ -2895,34 +2893,3 @@ function renderSettings(mount){
 
 /** Boot */
 navigate();
-
-function exportSelectionXLSX(){
-  try{ if(typeof applyDropdownFilters==='function'){ applyDropdownFilters(); } }catch(e){}
-  const rows = getFilteredRowsFallback();
-  const pref = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
-  const keySet = new Set();
-  rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
-  const rest = Array.from(keySet).filter(k => !pref.includes(k));
-  const headers = pref.concat(rest);
-  const data = [headers].concat(rows.map(r => headers.map(h => r[h] ?? '')));
-  if(typeof XLSX === 'undefined' || !XLSX || !XLSX.utils){
-    // Fallback to CSV if SheetJS not loaded
-    const csv = data.map(row => row.map(v => (v==null?'':String(v).replace(/"/g,'""'))).map(v => /[",\n]/.test(v)?`"${v}"`:v).join(',')).join('\r\n');
-    const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-    const fname = `selectie_${y}-${m}-${dd}.csv`;
-    downloadBlob(csv, fname, 'text/csv;charset=utf-8;'); return;
-  }
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Selectie");
-  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-  const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  const parts = [];
-  if(FixedFilters && FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
-  if(FixedFilters && FixedFilters.sportbond) parts.push(FixedFilters.sportbond);
-  if(FixedFilters && FixedFilters.sport) parts.push(FixedFilters.sport);
-  if(FixedFilters && FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
-  const fname = `selectie_${y}-${m}-${dd}` + (parts.length?`_${slug(parts.join('_'))}`:'') + `.xlsx`;
-  downloadBlob(wbout, fname, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-}
-
