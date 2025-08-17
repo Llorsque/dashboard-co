@@ -11,7 +11,8 @@ const AppState = {
   mapping: { name: 'naam', city: 'gemeente', group: 'sport', latitude: 'latitude', longitude: 'longitude' },
   theme: { brand: getVar('--brand') || '#212945', accent: getVar('--accent') || '#52E8E8', font: 'Archivo' },
   pendingFile: null,
-  usingDummy: true
+  usingDummy: true,
+  showBoundaries: true
 };
 
 const DummyRows = [
@@ -2646,10 +2647,22 @@ function renderCompare(mount){
   card.appendChild(p); mount.appendChild(card);
 }
 
+
+/** --- Boundaries helpers --- */
+function getGemeenteName(props){
+  // Try common keys used by PDOK/CBS datasets
+  const keys = ['GM_NAAM','Gemeentenaam','gemeentenaam','gemeente','name','NAAM'];
+  for(const k of keys){
+    if(props && props[k] != null) return String(props[k]);
+  }
+  return null;
+}
+
 /** Map */
 function renderMap(mount){
   const wrapper = document.createElement('div'); wrapper.className='card';
   const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle'; title.textContent='Kaart' + titleSuffix(); wrapper.appendChild(title);
+  const mapCount = document.createElement('div'); mapCount.className='sub'; mapCount.id='mapCount'; wrapper.appendChild(mapCount);
   const mapWrap = document.createElement('div'); mapWrap.className='tile equal'; mapWrap.style.height='64vh'; mapWrap.id='map'; wrapper.appendChild(mapWrap);
   mount.appendChild(wrapper);
 
@@ -2664,6 +2677,8 @@ function renderMap(mount){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 
   const pts = rows.map(r => ({lat:Number(r.latitude), lon:Number(r.longitude), name:r.naam})).filter(p => isFinite(p.lat)&&isFinite(p.lon));
+
+  const countEl = document.getElementById('mapCount'); if(countEl){ countEl.textContent = `${pts.length} locaties gevonden`; }
 
   if(!pts.length){
     const empty = L.popup({ closeButton:false, autoClose:false }).setLatLng([53.2,5.8]).setContent('Geen resultaten met deze filters').openOn(map);
