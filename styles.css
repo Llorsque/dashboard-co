@@ -83,3 +83,5 @@ input[type=file]{display:none}
 .section-title-row .btn{margin-left:auto}
 
 .toolbar{display:flex; justify-content:flex-end; margin:8px 0}
+
+.section-title-row .btn-ghost{margin-right:8px}
