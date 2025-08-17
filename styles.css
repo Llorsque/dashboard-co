@@ -61,20 +61,3 @@ input[type=file]{display:none}
 
 .footer{padding:12px 20px;color:var(--muted);font-size:12px;border-top:1px solid var(--border);background:#fff}
 :focus{outline:3px solid var(--ring);outline-offset:2px;border-radius:8px}
-
-.brand-text{display:flex;flex-direction:column;line-height:1.15}
-.brand-line-1{font-weight:700;color:#E7FBFB}
-.brand-line-2{font-size:12px;color:#E7F5F9;opacity:.9}
-
-/* Map popup styling */
-.pp-wrap{ min-width: 240px; max-width: 340px; }
-.pp-title{ font-weight:700; margin-bottom:6px; }
-.pp-list{ display:flex; flex-direction:column; gap:4px; }
-.pp-row{ display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
-.pp-k{ color: var(--muted); font-size:12px; }
-.pp-v{ font-weight:600; font-size:13px; }
-
-/* Selection list under KPI tiles */
-.sel-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto;padding:4px 0}
-.sel-item{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;box-shadow:var(--shadow)}
-.sel-empty{color:var(--muted);font-size:13px}
