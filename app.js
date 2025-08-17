@@ -2484,18 +2484,6 @@ function parseCSV(text){
   });
 }
 
-    const obj = {}; headers.forEach((h,i)=>{
-      const raw = parts[i] ?? '';
-      const n = Number(raw);
-      if(raw === '') obj[h] = null;
-      else if(!isNaN(n) && raw.trim()!=='') obj[h] = n;
-      else if(['true','false'].includes(String(raw).toLowerCase())) obj[h] = String(raw).toLowerCase()==='true';
-      else obj[h]=raw;
-    });
-    out.push(obj);
-  }
-  return out;
-}
 
 
 function findKeyInsensitive(obj, candidates){
