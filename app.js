@@ -2649,16 +2649,31 @@ function renderCompare(mount){
 /** Map */
 function renderMap(mount){
   const wrapper = document.createElement('div'); wrapper.className='card';
-  const title = document.createElement('div'); title.className='section-title'; title.textContent='Kaart'; wrapper.appendChild(title);
+  const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle'; title.textContent='Kaart' + titleSuffix(); wrapper.appendChild(title);
   const mapWrap = document.createElement('div'); mapWrap.className='tile equal'; mapWrap.style.height='64vh'; mapWrap.id='map'; wrapper.appendChild(mapWrap);
   mount.appendChild(wrapper);
 
-  const rows = AppState.rows.length ? AppState.rows : DummyRows;
-  const map = L.map('map').setView([52.99,5.9], 7);
+  // Ensure data exists and apply active dropdown filters from dashboard
+  if(!AppState.rows.length && AppState.usingDummy){
+    AppState.rows = DummyRows.slice(); AppState.schema = inferSchema(AppState.rows);
+  }
+  applyDropdownFilters(); // sets AppState.filtered based on FixedFilters
+  const rows = AppState.filtered && AppState.filtered.length ? AppState.filtered : [];
+
+  const map = L.map('map').setView([53.1,5.8], 8);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+
   const pts = rows.map(r => ({lat:Number(r.latitude), lon:Number(r.longitude), name:r.naam})).filter(p => isFinite(p.lat)&&isFinite(p.lon));
-  pts.forEach(p =>{ const m=L.marker([p.lat,p.lon]).addTo(map); m.bindPopup(`<strong>${p.name}</strong>`); });
-  if(pts.length){ const g = L.featureGroup(pts.map(p=>L.marker([p.lat,p.lon]))); map.fitBounds(g.getBounds().pad(0.25)); }
+
+  if(!pts.length){
+    const empty = L.popup({ closeButton:false, autoClose:false }).setLatLng([53.2,5.8]).setContent('Geen resultaten met deze filters').openOn(map);
+    return;
+  }
+
+  const markers = [];
+  pts.forEach(p =>{ const m=L.marker([p.lat,p.lon]).addTo(map); m.bindPopup(`<strong>${p.name}</strong>`); markers.push(m); });
+  const group = new L.featureGroup(markers);
+  map.fitBounds(group.getBounds().pad(0.25));
 }
 
 /** Help */
