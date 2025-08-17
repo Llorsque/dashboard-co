@@ -2686,48 +2686,9 @@ function renderMap(mount){
   }
 
   const markers = [];
-  pts.forEach(p =>{ const m=L.marker([p.lat,p.lon]).addTo(map); m.bindPopup(buildPopup(p.row), {maxWidth: 360}); markers.push(m); });
+  pts.forEach(p =>{ const m=L.marker([p.lat,p.lon]).addTo(map); m.bindPopup(`<strong>${p.name}</strong>`); markers.push(m); });
   const group = new L.featureGroup(markers);
   map.fitBounds(group.getBounds().pad(0.25));
-}
-
-
-/** Popup content for map markers: show all available fields for the club */
-function buildPopup(row){
-  const order = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
-  const seen = new Set();
-  const rows = [];
-  // Known fields first in a friendly order
-  order.forEach(k => {
-    if(row[k] !== undefined && row[k] !== null && row[k] !== ''){
-      let val = row[k];
-      if(k === 'contributie' && typeof val === 'number'){ val = fmtCurrency(val); }
-      if((k === 'latitude' || k === 'longitude') && typeof val === 'number'){ val = Number(val).toFixed(5); }
-      rows.push([k, val]); seen.add(k);
-    }
-  });
-  // Then any other fields dynamically
-  Object.keys(row).forEach(k => {
-    if(!seen.has(k) && row[k] !== null && row[k] !== ''){
-      let val = row[k];
-      if(typeof val === 'number' && !Number.isInteger(val)){
-        val = Number(val).toLocaleString('nl-NL', {maximumFractionDigits:2});
-      }
-      rows.push([k, val]);
-    }
-  });
-  // Derived metric example
-  if(row.leden && row.vrijwilligers){
-    const per100 = Math.round((row.vrijwilligers / row.leden) * 1000) / 10;
-    rows.push(['vrijwilligers_per_100_leden', per100]);
-  }
-  // Build HTML
-  const title = (row.naam ?? 'Vereniging');
-  const items = rows.map(([k,v]) => `<div class="pp-row"><div class="pp-k">${k}</div><div class="pp-v">${v}</div></div>`).join('');
-  return `<div class="pp-wrap">
-    <div class="pp-title">${title}</div>
-    <div class="pp-list">${items}</div>
-  </div>`;
 }
 
 /** Help */
