@@ -1,9 +1,19 @@
-# Sport Fryslân • CO Data analyse (baseline restore)
+# Sport Fryslân – Client-side Data Dashboard
 
-Dit is een **herstelversie** van het dashboard met werkende basis:
-- Linker menubalk
-- Dashboard met 4 filters, 12 KPI-tegels, en een dynamische Selectie-lijst
-- Kaart met pins die meebewegen met filters
-- CSV-upload en dummy data
+- 100% client-side (host op GitHub Pages).
+- Upload Excel/CSV via **Kies bestand** en klik **Laad dataset** om zichtbaar te maken.
+- 12 vaste tegels (4×3), geen grafieken of tabellen.
+- 4 dropdownfilters: Gemeente, Sportbond, Sport, Doelgroep.
+- Extra pagina's: Vergelijker, Kaart, Uitleg, Instellingen.
 
-> Exportknoppen (CSV/XLSX) zijn in deze herstelversie niet meegenomen om risico op fouten te minimaliseren. We kunnen ze later gecontroleerd terugplaatsen.
+## Publiceren
+1. Nieuwe GitHub-repo maken, alle bestanden uploaden.
+2. Settings → Pages → Build from branch → `main` → `/root`.
+3. Open de Pages-URL.
+
+
+## Gemeentegrenzen tonen (kaart)
+1. Download een GeoJSON met **gemeentegrenzen Friesland** (bijv. via PDOK / CBS).
+2. Sla dit bestand op als: `data/friesland-gemeenten.geojson` (exacte bestandsnaam).
+3. Open de **Kaart**-pagina en zet de toggle **Toon gemeentegrenzen** aan.
+4. Als je een **Gemeente**-filter kiest, wordt die grens extra geaccentueerd.
