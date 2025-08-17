@@ -222,6 +222,37 @@ function createTile({label, value, sub}){
     ${sub ? `<div class="sub">${sub}</div>` : ''}`;
   return div;
 }
+
+// --- Extra: inline controls inside the Dashboard first card (upload + filters) ---
+function makeInlineControls(){
+  const wrap = document.createElement('div');
+  wrap.className = 'flex';
+  const up = document.createElement('button');
+  up.className = 'btn'; up.textContent = 'Upload dataset';
+  up.addEventListener('click', () => document.getElementById('fileInput').click());
+  const name = document.createElement('div');
+  name.style.marginLeft = '8px';
+  name.style.color = 'var(--muted)';
+  name.textContent = AppState.datasetName ? AppState.datasetName : 'Geen dataset geladen';
+
+  // Local filter UI
+  const sel = document.createElement('select'); sel.style.marginLeft = 'auto';
+  AppState.schema.forEach(k => { const o=document.createElement('option'); o.value=k; o.textContent=k; sel.appendChild(o); });
+  const inp = document.createElement('input'); inp.placeholder = 'Filterwaarde...';
+  const add = document.createElement('button'); add.className='btn'; add.textContent='+ Filter';
+  const clr = document.createElement('button'); clr.className='btn btn-ghost'; clr.textContent='Reset';
+
+  add.addEventListener('click', ()=>{
+    const field = sel.value; const value = inp.value; if(!field || !value) return;
+    AppState.filters.push({ field, op:'contains', value }); applyFilters(); renderFilterBadges(); navigate();
+  });
+  clr.addEventListener('click', ()=>{ AppState.filters=[]; applyFilters(); renderFilterBadges(); navigate(); });
+
+  wrap.appendChild(up); wrap.appendChild(name);
+  wrap.appendChild(sel); wrap.appendChild(inp); wrap.appendChild(add); wrap.appendChild(clr);
+  return wrap;
+}
+
 function formatKPI(v){
   if(typeof v === 'number'){
     // Format integers vs decimals
@@ -233,56 +264,55 @@ function formatKPI(v){
 
 /** ---------- Dashboard ---------- */
 function renderDashboard(mount){
-  const section = document.createElement('div'); section.className='card';
-  const title = document.createElement('div'); title.className='section-title'; title.innerHTML='<span>Dashboard</span>';
-  section.appendChild(title);
+  // Card 1: Data & Filters (like "Mijn dagplanning" area)
+  const card1 = document.createElement('div'); card1.className='card stack';
+  const t1 = document.createElement('div'); t1.className='section-title'; t1.innerHTML = '<span>Data</span>';
+  card1.appendChild(t1);
+  card1.appendChild(makeInlineControls());
+  mount.appendChild(card1);
+
+  // Card 2: Kerncijfers
+  const card2 = document.createElement('div'); card2.className='card';
+  const t2 = document.createElement('div'); t2.className='section-title'; t2.innerHTML = '<span>Kerncijfers</span>';
+  card2.appendChild(t2);
 
   renderFilterBadges();
+
   const total = AppState.rows.length;
   const current = AppState.filtered.length;
 
   const grid = document.createElement('div');
   grid.className = 'tile-grid';
 
-  grid.appendChild(createTile({
-    label: 'Totaal (alle rijen)',
-    value: total
-  }));
-  grid.appendChild(createTile({
-    label: 'Huidige selectie',
-    value: current,
-    sub: `${kpiPercent(current, total)}% van totaal`
-  }));
+  grid.appendChild(createTile({ label: 'Totaal (alle rijen)', value: total }));
+  grid.appendChild(createTile({ label: 'Huidige selectie', value: current, sub: `${kpiPercent(current, total)}% van totaal` }));
 
-  // If mapping.group is set, show number of unieke groepen
   if(AppState.mapping.group && AppState.schema.includes(AppState.mapping.group)){
-    grid.appendChild(createTile({
-      label: `Unieke "${AppState.mapping.group}" in selectie`,
-      value: kpiUnique(AppState.filtered, AppState.mapping.group)
-    }));
+    grid.appendChild(createTile({ label: `Unieke "${AppState.mapping.group}" in selectie`, value: kpiUnique(AppState.filtered, AppState.mapping.group) }));
   }
 
-  // Auto-detect numeric columns and provide sums
   const numericFields = AppState.schema.filter(k => AppState.filtered.some(r => typeof r[k] === 'number'));
   numericFields.slice(0,4).forEach(k => {
-    grid.appendChild(createTile({
-      label: `Som ${k} (selectie)`,
-      value: kpiSum(AppState.filtered, k)
-    }));
+    grid.appendChild(createTile({ label: `Som ${k} (selectie)`, value: kpiSum(AppState.filtered, k) }));
   });
 
-  // Percentage van records met waarde in veld 'city' (indien gemapt)
   if(AppState.mapping.city && AppState.schema.includes(AppState.mapping.city)){
     const withCity = AppState.filtered.filter(r => !!r[AppState.mapping.city]).length;
-    grid.appendChild(createTile({
-      label: `Records met ${AppState.mapping.city}`,
-      value: kpiPercent(withCity, current) + '%',
-      sub: `${withCity} van ${current}`
-    }));
+    grid.appendChild(createTile({ label: `Records met ${AppState.mapping.city}`, value: kpiPercent(withCity, current) + '%', sub: `${withCity} van ${current}` }));
   }
 
-  section.appendChild(grid);
-  mount.appendChild(section);
+  card2.appendChild(grid);
+  mount.appendChild(card2);
+
+  // Card 3: Overzicht (placeholder for extension; currently duplicates key totals to match layout density)
+  const card3 = document.createElement('div'); card3.className='card';
+  const t3 = document.createElement('div'); t3.className='section-title'; t3.innerHTML = '<span>Overzicht</span>';
+  card3.appendChild(t3);
+  const grid2 = document.createElement('div'); grid2.className='tile-grid';
+  grid2.appendChild(createTile({ label: 'Records', value: current }));
+  grid2.appendChild(createTile({ label: 'Unieke velden (schema)', value: AppState.schema.length }));
+  card3.appendChild(grid2);
+  mount.appendChild(card3);
 }
 
 /** ---------- Compare (Vergelijker) ---------- */
