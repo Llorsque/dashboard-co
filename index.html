@@ -13,49 +13,64 @@
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 <body>
-  <div id="app">
+  <div id="app" class="layout">
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo">SF</div>
-        <div class="brand-text">
-          <strong>Sport Fryslân</strong><br>
-          <span>Data Dashboard</span>
-        </div>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M3 12h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M12 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>Sport Fryslân</span>
       </div>
-
       <nav class="nav">
-        <a href="#/dashboard" class="nav-link" data-route="dashboard">Dashboard</a>
-        <a href="#/compare" class="nav-link" data-route="compare">Vergelijker</a>
-        <a href="#/map" class="nav-link" data-route="map">Kaart</a>
-        <a href="#/help" class="nav-link" data-route="help">Uitleg</a>
-        <a href="#/settings" class="nav-link" data-route="settings">Instellingen</a>
+        <a href="#/dashboard" class="nav-link" data-route="dashboard">
+          <span class="ico">🏠</span> <span>Dashboard</span>
+        </a>
+        <a href="#/compare" class="nav-link" data-route="compare">
+          <span class="ico">⇄</span> <span>Vergelijker</span>
+        </a>
+        <a href="#/map" class="nav-link" data-route="map">
+          <span class="ico">🗺️</span> <span>Kaart</span>
+        </a>
+        <a href="#/help" class="nav-link" data-route="help">
+          <span class="ico">❓</span> <span>Uitleg</span>
+        </a>
+        <a href="#/settings" class="nav-link" data-route="settings">
+          <span class="ico">⚙️</span> <span>Instellingen</span>
+        </a>
       </nav>
-
       <div class="sidebar-footer">
         <button id="resetApp" class="btn btn-ghost">Reset app</button>
       </div>
     </aside>
 
     <main class="main">
-      <header class="topbar">
+      <header class="appbar">
+        <div class="page-title" id="pageTitle">Dashboard</div>
+        <div class="avatar" title="Gebruiker">
+          <span>U</span>
+        </div>
+      </header>
+
+      <section class="toolbar" role="region" aria-label="Data en filters">
         <div class="file-upload">
-          <label for="fileInput" class="btn">Upload data (.xlsx / .csv)</label>
+          <label for="fileInput" class="btn btn-primary">Upload (.xlsx / .csv)</label>
           <input id="fileInput" type="file" accept=".xlsx,.csv" />
           <div id="datasetName" class="dataset-name">Geen dataset geladen</div>
         </div>
 
         <div class="filters">
-          <select id="filterField"></select>
-          <input id="filterValue" type="text" placeholder="Filterwaarde..." />
+          <select id="filterField" aria-label="Filterveld"></select>
+          <input id="filterValue" type="text" placeholder="Filterwaarde..." aria-label="Filterwaarde" />
           <button id="addFilter" class="btn">+ Filter</button>
-          <button id="clearFilters" class="btn btn-ghost">Reset filters</button>
+          <button id="clearFilters" class="btn btn-ghost">Reset</button>
         </div>
-      </header>
+      </section>
 
-      <section id="view" class="view"></section>
+      <section id="view" class="content"></section>
 
       <footer class="footer">
-        <span>Client-side • Geen backend • © 2025</span>
+        <span>Client-side • © 2025 Sport Fryslân</span>
       </footer>
     </main>
   </div>

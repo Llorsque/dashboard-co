@@ -1,3 +1,13 @@
+
+function titleFor(route){
+  switch(route){
+    case 'compare': return 'Vergelijker';
+    case 'map': return 'Kaart';
+    case 'help': return 'Uitleg';
+    case 'settings': return 'Instellingen';
+    default: return 'Dashboard';
+  }
+}
 // Sport Fryslân Dashboard – Pure client-side app
 // Routing, state, file upload (xlsx/csv), filters, KPI tiles, compare, map (Leaflet), settings.
 
@@ -59,7 +69,7 @@ function navigate(){
   document.querySelectorAll('.nav-link').forEach(a => {
     a.classList.toggle('active', a.getAttribute('data-route') === hash);
   });
-  const view = document.getElementById('view');
+  const view = document.getElementById('view'); document.getElementById('pageTitle').textContent = titleFor(hash);
   view.innerHTML = '';
   (routes[hash] || renderDashboard)(view);
 }
@@ -165,7 +175,7 @@ document.getElementById('resetApp').addEventListener('click', ()=>{
 });
 
 function renderFilterBadges(){
-  const view = document.getElementById('view');
+  const view = document.getElementById('view'); document.getElementById('pageTitle').textContent = titleFor(hash);
   const existing = document.getElementById('filterBadges');
   if(existing) existing.remove();
   const wrap = document.createElement('div');
@@ -223,6 +233,10 @@ function formatKPI(v){
 
 /** ---------- Dashboard ---------- */
 function renderDashboard(mount){
+  const section = document.createElement('div'); section.className='card';
+  const title = document.createElement('div'); title.className='section-title'; title.innerHTML='<span>Dashboard</span>';
+  section.appendChild(title);
+
   renderFilterBadges();
   const total = AppState.rows.length;
   const current = AppState.filtered.length;
@@ -267,11 +281,15 @@ function renderDashboard(mount){
     }));
   }
 
-  mount.appendChild(grid);
+  section.appendChild(grid);
+  mount.appendChild(section);
 }
 
 /** ---------- Compare (Vergelijker) ---------- */
 function renderCompare(mount){
+  const wrapper = document.createElement('div'); wrapper.className='card';
+  const title = document.createElement('div'); title.className='section-title'; title.textContent='Vergelijker'; wrapper.appendChild(title);
+
   const wrap = document.createElement('div');
   wrap.className = 'split-2';
 
@@ -289,7 +307,8 @@ function renderCompare(mount){
   right.appendChild(setB.block);
 
   wrap.appendChild(left); wrap.appendChild(right);
-  mount.appendChild(wrap);
+  wrapper.appendChild(wrap);
+  mount.appendChild(wrapper);
 
   function update(){
     renderCompareTiles(setA, left);
@@ -347,6 +366,9 @@ function renderCompareTiles(set, container){
 
 /** ---------- Map (Kaart) ---------- */
 function renderMap(mount){
+  const wrapper = document.createElement('div'); wrapper.className='card';
+  const title = document.createElement('div'); title.className='section-title'; title.textContent='Kaart'; wrapper.appendChild(title);
+
   const card = document.createElement('div');
   card.className = 'card';
   const info = document.createElement('div');
@@ -359,7 +381,8 @@ function renderMap(mount){
   mapWrap.className = 'map-wrap';
   mapWrap.id = 'map';
   card.appendChild(info); card.appendChild(mapWrap);
-  mount.appendChild(card);
+  wrapper.appendChild(card);
+  mount.appendChild(wrapper);
 
   // Initialize Leaflet
   const map = L.map('map').setView([52.1, 5.3], 7);
@@ -389,6 +412,9 @@ function renderMap(mount){
 
 /** ---------- Help (Uitleg) ---------- */
 function renderHelp(mount){
+  const wrapper = document.createElement('div'); wrapper.className='card';
+  const title = document.createElement('div'); title.className='section-title'; title.textContent='Uitleg'; wrapper.appendChild(title);
+
   const card = document.createElement('div'); card.className = 'card stack';
   card.innerHTML = `
     <h3>Uitleg</h3>
@@ -402,11 +428,15 @@ function renderHelp(mount){
     </ul>
     <p>Er worden <strong>geen gegevens geüpload naar een server</strong>; alles draait in je browser.</p>
   `;
-  mount.appendChild(card);
+  wrapper.appendChild(card);
+  mount.appendChild(wrapper);
 }
 
 /** ---------- Settings (Instellingen) ---------- */
 function renderSettings(mount){
+  const wrapper = document.createElement('div'); wrapper.className='card';
+  const title = document.createElement('div'); title.className='section-title'; title.textContent='Instellingen'; wrapper.appendChild(title);
+
   const card = document.createElement('div'); card.className='card stack';
   card.innerHTML = `<h3>Instellingen</h3>`;
 
@@ -462,7 +492,8 @@ function renderSettings(mount){
   card.appendChild(mappingBlock);
   card.appendChild(saveBtn);
 
-  mount.appendChild(card);
+  wrapper.appendChild(card);
+  mount.appendChild(wrapper);
 }
 
 /** ---------- Boot ---------- */
