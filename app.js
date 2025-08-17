@@ -2730,18 +2730,64 @@ function getGemeenteName(props){
 }
 
 /** Map */
-function renderMap(mount){
-  const wrapper = document.createElement('div'); wrapper.className='card';
-  const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle'; title.textContent='Kaart' + titleSuffix(); wrapper.appendChild(title);
-  const mapCount = document.createElement('div'); mapCount.className='sub'; mapCount.id='mapCount'; wrapper.appendChild(mapCount);
-  const mapWrap = document.createElement('div'); mapWrap.className='tile equal'; mapWrap.style.height='64vh'; mapWrap.id='map'; wrapper.appendChild(mapWrap);
-    const hard = document.createElement('button'); hard.className='btn btn-ghost'; hard.textContent='Volledige reset (cache & instellingen)'; hard.addEventListener('click', ()=>{ localStorage.clear(); location.reload(); }); wrapper.appendChild(hard);
-  mount.appendChild(wrapper);
 
-  // Ensure data exists and apply active dropdown filters from dashboard
-  if(!AppState.rows.length && AppState.usingDummy){
-    AppState.rows = DummyRows.slice(); AppState.schema = inferSchema(AppState.rows);
+function renderMap(mount){
+  const main = document.getElementById('main'); if(main) main.innerHTML='';
+  const card = document.createElement('div'); card.className='card';
+  const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle';
+  title.textContent = 'Kaart' + (typeof titleSuffix==='function' ? titleSuffix() : '');
+  card.appendChild(title);
+  const sub = document.createElement('div'); sub.className='sub'; sub.id='mapCount'; sub.textContent=''; card.appendChild(sub);
+  const mapDiv = document.createElement('div'); mapDiv.style.height='70vh'; mapDiv.id='map'; card.appendChild(mapDiv);
+  if(main) main.appendChild(card);
+
+  try{ if(typeof applyDropdownFilters==='function') applyDropdownFilters(); }catch(e){}
+  const baseRows = (AppState.filtered && AppState.filtered.length) ? AppState.filtered
+                  : (AppState.rows && AppState.rows.length ? AppState.rows : (typeof DummyRows!=='undefined'? DummyRows : []));
+
+  const map = L.map(mapDiv).setView([53.1, 5.8], 8);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+  setTimeout(()=>map.invalidateSize(), 150);
+
+  const sample = baseRows[0] || {};
+  const latK = (AppState.mapping && AppState.mapping.latitude) || Object.keys(sample).find(k => ['latitude','lat','y','breedtegraad'].includes(k.toLowerCase())) || 'latitude';
+  const lonK = (AppState.mapping && AppState.mapping.longitude) || Object.keys(sample).find(k => ['longitude','lon','lng','x','lengtegraad'].includes(k.toLowerCase())) || 'longitude';
+  const toNum = (v) => {
+    if(v===null||v===undefined) return NaN;
+    const s = String(v).trim();
+    if(!s) return NaN;
+    if(/^-?\d+,\d+$/.test(s) && !s.includes('.')) return Number(s.replace(',', '.'));
+    const n = Number(s); return isNaN(n) ? NaN : n;
+  };
+
+  const pts = baseRows.map(r => ({ lat: toNum(r[latK]), lon: toNum(r[lonK]), row: r })).filter(p => isFinite(p.lat) && isFinite(p.lon));
+
+  const subEl = document.getElementById('mapCount');
+  if(subEl) subEl.textContent = `${pts.length} locaties gevonden`;
+
+  if(!pts.length){
+    L.popup({ closeButton:false, autoClose:false }).setLatLng([53.2,5.8]).setContent('Geen resultaten').openOn(map);
+    return;
   }
+
+  const markers = pts.map(p => {
+    const m = L.marker([p.lat, p.lon], {keyboard:false}).addTo(map);
+    if(typeof buildPopup === 'function'){
+      m.bindPopup(buildPopup(p.row), {maxWidth: 360});
+    } else {
+      const nm = p.row && p.row.naam ? p.row.naam : 'Vereniging';
+      const sport = p.row && p.row.sport ? p.row.sport : '';
+      const leden = p.row && (p.row.leden ?? p.row.aantal_leden) ? (p.row.leden ?? p.row.aantal_leden) : '';
+      const adres = [p.row.adres || p.row.straat || '', p.row.huisnummer || ''].filter(Boolean).join(' ');
+      const pcpl = [p.row.postcode || '', p.row.plaats || p.row.gemeente || ''].filter(Boolean).join(' ');
+      const lines = [`<strong>${nm}</strong>`, sport?`<div>Sport: ${sport}</div>`:'', leden?`<div>Leden: ${leden}</div>`:'', (adres||pcpl)?`<div>Adres: ${[adres, pcpl].filter(Boolean).join(', ')}</div>`:''].join('');
+      m.bindPopup(lines, {maxWidth: 360});
+    }
+    return m;
+  });
+  const group = L.featureGroup(markers);
+  map.fitBounds(group.getBounds().pad(0.25));
+}
   applyDropdownFilters(); // sets AppState.filtered based on FixedFilters
   const rows = AppState.filtered && AppState.filtered.length ? AppState.filtered : [];
 
