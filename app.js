@@ -1,52 +1,43 @@
-
-function titleFor(route){
-  switch(route){
-    case 'compare': return 'Vergelijker';
-    case 'map': return 'Kaart';
-    case 'help': return 'Uitleg';
-    case 'settings': return 'Instellingen';
-    default: return 'Dashboard';
-  }
-}
-// Sport Fryslân Dashboard – Pure client-side app
-// Routing, state, file upload (xlsx/csv), filters, KPI tiles, compare, map (Leaflet), settings.
-
-/** ---------- Global State ---------- */
-const AppState = {
-  rows: [],            // raw records (array of objects)
-  filtered: [],        // filtered records
-  filters: [],         // [{ field, op, value }]; op currently only 'contains' or 'equals'
-  datasetName: null,
-  schema: [],          // list of field names
-  mapping: {          // field mapping (customizable in settings)
-    name: null,
-    city: null,
-    latitude: null,
-    longitude: null,
-    group: null // generic grouping field
-  },
-  theme: {
-    brand: getVar('--brand') || '#212945',
-    accent: getVar('--accent') || '#52E8E8',
-    font: 'Archivo'
-  }
-};
-
+// Sport Fryslân Dashboard – client-side
 function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 function setVar(name, val){ document.documentElement.style.setProperty(name, val); }
 
+const AppState = {
+  rows: [],
+  filtered: [],
+  filters: [],
+  datasetName: null,
+  schema: [],
+  mapping: { name: 'naam', city: 'gemeente', group: 'sport', latitude: 'latitude', longitude: 'longitude' },
+  theme: { brand: getVar('--brand') || '#212945', accent: getVar('--accent') || '#52E8E8', font: 'Archivo' },
+  pendingFile: null,
+  usingDummy: true
+};
+
+const DummyRows = [
+  {naam:'VV Oerterp', gemeente:'Opsterland', sportbond:'KNVB', sport:'Voetbal', doelgroep:'Senioren', latitude:53.0732, longitude:6.0967, leden:250, vrijwilligers:40, contributie:185},
+  {naam:'SV Bakkeveen', gemeente:'Opsterland', sportbond:'KNGU', sport:'Turnen', doelgroep:'Jeugd', latitude:53.0658, longitude:6.2667, leden:180, vrijwilligers:30, contributie:160},
+  {naam:'VV Wolvega', gemeente:'Weststellingwerf', sportbond:'KNVB', sport:'Voetbal', doelgroep:'Gemengd', latitude:52.8755, longitude:6.0032, leden:320, vrijwilligers:55, contributie:195},
+  {naam:'SC Jubbega', gemeente:'Heerenveen', sportbond:'KNVB', sport:'Voetbal', doelgroep:'Jeugd', latitude:52.9890, longitude:6.0683, leden:210, vrijwilligers:35, contributie:170},
+  {naam:'VV Oosterstreek', gemeente:'Weststellingwerf', sportbond:'KNVB', sport:'Voetbal', doelgroep:'Senioren', latitude:52.8804, longitude:6.1437, leden:150, vrijwilligers:22, contributie:165},
+  {naam:'Shorttrack Drachten', gemeente:'Smallingerland', sportbond:'KNSB', sport:'Schaatsen', doelgroep:'Jeugd', latitude:53.1125, longitude:6.0989, leden:95, vrijwilligers:18, contributie:140},
+  {naam:'Basket Leeuwarden', gemeente:'Leeuwarden', sportbond:'NBB', sport:'Basketbal', doelgroep:'Senioren', latitude:53.2012, longitude:5.7999, leden:210, vrijwilligers:28, contributie:175},
+  {naam:'Hockey Sneek', gemeente:'Súdwest-Fryslân', sportbond:'KNHB', sport:'Hockey', doelgroep:'Gemengd', latitude:53.0323, longitude:5.6589, leden:260, vrijwilligers:42, contributie:220},
+  {naam:'Volley Bolsward', gemeente:'Súdwest-Fryslân', sportbond:'Nevobo', sport:'Volleybal', doelgroep:'Jeugd', latitude:53.0667, longitude:5.5333, leden:140, vrijwilligers:20, contributie:150},
+  {naam:'Tennis Gorredijk', gemeente:'Opsterland', sportbond:'KNLTB', sport:'Tennis', doelgroep:'Senioren', latitude:53.0092, longitude:6.0668, leden:130, vrijwilligers:16, contributie:155},
+  {naam:'Badminton Heerenveen', gemeente:'Heerenveen', sportbond:'Badminton Nederland', sport:'Badminton', doelgroep:'Gemengd', latitude:52.9599, longitude:5.9242, leden:85, vrijwilligers:12, contributie:120},
+  {naam:'Zwem Joure', gemeente:'De Fryske Marren', sportbond:'KNZB', sport:'Zwemmen', doelgroep:'Jeugd', latitude:52.9650, longitude:5.8000, leden:175, vrijwilligers:24, contributie:145}
+];
+
 function saveState(){
   localStorage.setItem('sf_dashboard_state', JSON.stringify({
-    mapping: AppState.mapping,
     theme: AppState.theme
   }));
 }
 function loadState(){
   try{
     const data = JSON.parse(localStorage.getItem('sf_dashboard_state'));
-    if(!data) return;
-    if(data.mapping) Object.assign(AppState.mapping, data.mapping);
-    if(data.theme){
+    if(data && data.theme){
       Object.assign(AppState.theme, data.theme);
       setVar('--brand', AppState.theme.brand);
       setVar('--accent', AppState.theme.accent);
@@ -55,7 +46,34 @@ function loadState(){
 }
 loadState();
 
-/** ---------- Router ---------- */
+/** Utils */
+function inferSchema(rows){ const s = new Set(); rows.slice(0,50).forEach(r => Object.keys(r).forEach(k => s.add(k))); return Array.from(s); }
+function uniqueValues(rows, field){ return Array.from(new Set(rows.map(r => r[field]).filter(v => v!==null && v!==undefined))).sort((a,b)=>(''+a).localeCompare((''+b),'nl')); }
+function average(rows, field){ if(!rows.length) return 0; const sum = rows.reduce((a,r)=> a + (typeof r[field]==='number'? r[field]:0), 0); return sum/rows.length; }
+function fmtCurrency(v){ return (v||0).toLocaleString('nl-NL', { style:'currency', currency:'EUR', maximumFractionDigits:0 }); }
+function formatKPI(v){ if(typeof v==='number'){ if(Number.isInteger(v)) return v.toLocaleString('nl-NL'); return v.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1}); } return v; }
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
+  const headers = lines.shift().split(',').map(h=>h.trim());
+  const out = [];
+  for(const line of lines){
+    const parts = []; const re=/(?:^|,)("(?:(?:"")*[^"]*)*"|[^,]*)/g; let m;
+    let i=0;
+    while(m = re.exec(line)){ let v = m[1]; if(v.startsWith(',')) v=v.slice(1); v=v.replace(/^"|"$/g,'').replace(/""/g,'"'); parts.push(v); i++; }
+    const obj = {}; headers.forEach((h,i)=>{
+      const raw = parts[i] ?? '';
+      const n = Number(raw);
+      if(raw === '') obj[h] = null;
+      else if(!isNaN(n) && raw.trim()!=='') obj[h] = n;
+      else if(['true','false'].includes(String(raw).toLowerCase())) obj[h] = String(raw).toLowerCase()==='true';
+      else obj[h]=raw;
+    });
+    out.push(obj);
+  }
+  return out;
+}
+
+/** Router */
 const routes = {
   'dashboard': renderDashboard,
   'compare': renderCompare,
@@ -63,474 +81,191 @@ const routes = {
   'help': renderHelp,
   'settings': renderSettings
 };
-
+function titleFor(route){ switch(route){ case 'compare': return 'Vergelijker'; case 'map': return 'Kaart'; case 'help': return 'Uitleg'; case 'settings': return 'Instellingen'; default: return 'Dashboard'; } }
 function navigate(){
-  const hash = location.hash.replace('#/', '') || 'dashboard';
-  document.querySelectorAll('.nav-link').forEach(a => {
-    a.classList.toggle('active', a.getAttribute('data-route') === hash);
-  });
-  const view = document.getElementById('view'); document.getElementById('pageTitle').textContent = titleFor(hash);
-  view.innerHTML = '';
-  (routes[hash] || renderDashboard)(view);
+  const hash = location.hash.replace('#/','') || 'dashboard';
+  document.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active', a.getAttribute('data-route')===hash));
+  const view = document.getElementById('view'); view.innerHTML='';
+  document.getElementById('pageTitle').textContent = titleFor(hash);
+  (routes[hash]||renderDashboard)(view);
 }
 window.addEventListener('hashchange', navigate);
 
-/** ---------- File Upload ---------- */
-document.getElementById('fileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if(!file) return;
-  AppState.datasetName = file.name;
-  document.getElementById('datasetName').textContent = file.name;
+/** File input: only select (pending); separate button loads */
+document.addEventListener('DOMContentLoaded', ()=>{
+  const fileInput = document.getElementById('fileInput');
+  if(fileInput){
+    fileInput.addEventListener('change', (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      AppState.pendingFile = file; AppState.datasetName = file.name;
+      const ds = document.querySelector('.dataset-name'); if(ds) ds.textContent = file.name + ' (klaar om te laden)';
+    });
+  }
+  document.getElementById('resetApp').addEventListener('click', ()=>{ localStorage.removeItem('sf_dashboard_state'); location.reload(); });
+});
 
+/** Dropdown filters */
+const FixedFilters = { gemeente:null, sportbond:null, sport:null, doelgroep:null };
+function buildDropdownFilters(){
+  const src = AppState.rows.length ? AppState.rows : DummyRows;
+  const setSel = (id, field)=>{
+    const el = document.getElementById(id); if(!el) return;
+    const keep = el.value;
+    el.innerHTML=''; const a=document.createElement('option'); a.value=''; a.textContent='(Alle)'; el.appendChild(a);
+    uniqueValues(src, field).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o); });
+    if(keep && Array.from(el.options).some(o=>o.value===keep)) el.value=keep;
+  };
+  setSel('ff_gemeente','gemeente'); setSel('ff_sportbond','sportbond'); setSel('ff_sport','sport'); setSel('ff_doelgroep','doelgroep');
+}
+function applyDropdownFilters(){
+  const src = AppState.rows.length ? AppState.rows : DummyRows;
+  AppState.filtered = src.filter(r => (!FixedFilters.gemeente || r.gemeente===FixedFilters.gemeente)
+    && (!FixedFilters.sportbond || r.sportbond===FixedFilters.sportbond)
+    && (!FixedFilters.sport || r.sport===FixedFilters.sport)
+    && (!FixedFilters.doelgroep || r.doelgroep===FixedFilters.doelgroep));
+}
+
+/** Dashboard */
+async function loadSelectedFile(){
+  const file = AppState.pendingFile;
+  if(!file){ alert('Kies eerst een bestand.'); return; }
   if(file.name.toLowerCase().endsWith('.csv')){
-    const text = await file.text();
-    AppState.rows = parseCSV(text);
-  } else {
-    const data = await file.arrayBuffer();
-    const wb = XLSX.read(data, { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    AppState.rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+    const text = await file.text(); AppState.rows = parseCSV(text);
+  }else{
+    const data = await file.arrayBuffer(); const wb = XLSX.read(data,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
+    AppState.rows = XLSX.utils.sheet_to_json(ws,{defval:null});
   }
-  AppState.schema = inferSchema(AppState.rows);
-  AppState.filters = [];
-  applyFilters();
-  populateFilterField();
-  navigate();
-});
-
-function parseCSV(text){
-  const [headerLine, ...lines] = text.split(/\r?\n/).filter(Boolean);
-  const headers = headerLine.split(',').map(h => h.trim());
-  return lines.map(line => {
-    const parts = splitCsv(line);
-    const obj = {};
-    headers.forEach((h, i) => obj[h] = parts[i] !== undefined ? coerce(parts[i]) : null);
-    return obj;
-  });
-}
-function splitCsv(line){
-  const out=[], re=/(?:^|,)("(?:(?:"")*[^"]*)*"|[^,]*)/g; let m;
-  while(m = re.exec(line)){
-    let v = m[1];
-    if(v.startsWith(',')) v = v.slice(1);
-    v = v.replace(/^"|"$/g, '').replace(/""/g, '"');
-    out.push(v);
-  }
-  return out;
-}
-function coerce(v){
-  if(v === '') return null;
-  const n = Number(v);
-  if(!isNaN(n) && v.trim() !== '') return n;
-  if(v.toLowerCase?.() === 'true') return true;
-  if(v.toLowerCase?.() === 'false') return false;
-  return v;
+  AppState.schema = inferSchema(AppState.rows); AppState.usingDummy = false; AppState.filters=[]; applyDropdownFilters(); buildDropdownFilters(); navigate();
 }
 
-/** ---------- Filters ---------- */
-function inferSchema(rows){
-  const keys = new Set();
-  rows.slice(0, 50).forEach(r => Object.keys(r).forEach(k => keys.add(k)));
-  return Array.from(keys);
-}
-function applyFilters(){
-  AppState.filtered = AppState.rows.filter(row => {
-    return AppState.filters.every(f => {
-      const cell = (row[f.field] ?? '').toString().toLowerCase();
-      const val = (f.value ?? '').toString().toLowerCase();
-      if(f.op === 'equals') return cell === val;
-      return cell.includes(val);
-    });
-  });
-}
-
-function populateFilterField(){
-  const sel = document.getElementById('filterField');
-  sel.innerHTML = '';
-  AppState.schema.forEach(k => {
-    const opt = document.createElement('option');
-    opt.value = k; opt.textContent = k;
-    sel.appendChild(opt);
-  });
-}
-
-document.getElementById('addFilter').addEventListener('click', ()=>{
-  const field = document.getElementById('filterField').value;
-  const value = document.getElementById('filterValue').value;
-  if(!field || !value) return;
-  AppState.filters.push({ field, op:'contains', value });
-  applyFilters();
-  renderFilterBadges();
-  navigate();
-});
-document.getElementById('clearFilters').addEventListener('click', ()=>{
-  AppState.filters = [];
-  applyFilters();
-  renderFilterBadges();
-  navigate();
-});
-document.getElementById('resetApp').addEventListener('click', ()=>{
-  localStorage.removeItem('sf_dashboard_state');
-  location.reload();
-});
-
-function renderFilterBadges(){
-  const view = document.getElementById('view'); document.getElementById('pageTitle').textContent = titleFor(hash);
-  const existing = document.getElementById('filterBadges');
-  if(existing) existing.remove();
-  const wrap = document.createElement('div');
-  wrap.id = 'filterBadges';
-  wrap.className = 'stack';
-  const row = document.createElement('div');
-  row.className = 'flex';
-  AppState.filters.forEach((f, idx)=>{
-    const b = document.createElement('span');
-    b.className = 'badge';
-    b.textContent = `${f.field} contains "${f.value}"`;
-    b.title = 'Klik om te verwijderen';
-    b.style.cursor = 'pointer';
-    b.addEventListener('click', ()=>{
-      AppState.filters.splice(idx,1);
-      applyFilters(); renderFilterBadges(); navigate();
-    });
-    row.appendChild(b);
-  });
-  if(AppState.filters.length){
-    wrap.appendChild(row);
-    view.prepend(wrap);
-  }
-}
-
-/** ---------- KPI Helpers ---------- */
-function kpiCount(rows){ return rows.length; }
-function kpiPercent(part, whole){ return whole === 0 ? 0 : Math.round((part/whole)*1000)/10; } // 1 decimaal
-
-function kpiUnique(rows, field){
-  const set = new Set(rows.map(r => r[field]).filter(v => v !== null && v !== undefined));
-  return set.size;
-}
-
-function kpiSum(rows, field){
-  return rows.reduce((acc,r)=> acc + (typeof r[field] === 'number' ? r[field] : 0), 0);
-}
-
-function createTile({label, value, sub}){
-  const div = document.createElement('div');
-  div.className = 'tile';
-  div.innerHTML = `<div class="kpi">${formatKPI(value)}</div>
-    <div class="label">${label}</div>
-    ${sub ? `<div class="sub">${sub}</div>` : ''}`;
-  return div;
-}
-
-// --- Extra: inline controls inside the Dashboard first card (upload + filters) ---
-function makeInlineControls(){
-  const wrap = document.createElement('div');
-  wrap.className = 'flex';
-  const up = document.createElement('button');
-  up.className = 'btn'; up.textContent = 'Upload dataset';
-  up.addEventListener('click', () => document.getElementById('fileInput').click());
-  const name = document.createElement('div');
-  name.style.marginLeft = '8px';
-  name.style.color = 'var(--muted)';
-  name.textContent = AppState.datasetName ? AppState.datasetName : 'Geen dataset geladen';
-
-  // Local filter UI
-  const sel = document.createElement('select'); sel.style.marginLeft = 'auto';
-  AppState.schema.forEach(k => { const o=document.createElement('option'); o.value=k; o.textContent=k; sel.appendChild(o); });
-  const inp = document.createElement('input'); inp.placeholder = 'Filterwaarde...';
-  const add = document.createElement('button'); add.className='btn'; add.textContent='+ Filter';
-  const clr = document.createElement('button'); clr.className='btn btn-ghost'; clr.textContent='Reset';
-
-  add.addEventListener('click', ()=>{
-    const field = sel.value; const value = inp.value; if(!field || !value) return;
-    AppState.filters.push({ field, op:'contains', value }); applyFilters(); renderFilterBadges(); navigate();
-  });
-  clr.addEventListener('click', ()=>{ AppState.filters=[]; applyFilters(); renderFilterBadges(); navigate(); });
-
-  wrap.appendChild(up); wrap.appendChild(name);
-  wrap.appendChild(sel); wrap.appendChild(inp); wrap.appendChild(add); wrap.appendChild(clr);
-  return wrap;
-}
-
-function formatKPI(v){
-  if(typeof v === 'number'){
-    // Format integers vs decimals
-    if(Number.isInteger(v)) return v.toLocaleString('nl-NL');
-    return v.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  }
-  return v;
-}
-
-/** ---------- Dashboard ---------- */
 function renderDashboard(mount){
-  // Card 1: Data & Filters (like "Mijn dagplanning" area)
+  if(!AppState.rows.length && AppState.usingDummy){
+    AppState.rows = DummyRows.slice(); AppState.schema = inferSchema(AppState.rows); buildDropdownFilters(); applyDropdownFilters();
+  }
+
+  // Controls card
   const card1 = document.createElement('div'); card1.className='card stack';
-  const t1 = document.createElement('div'); t1.className='section-title'; t1.innerHTML = '<span>Data</span>';
-  card1.appendChild(t1);
-  card1.appendChild(makeInlineControls());
+  const head = document.createElement('div'); head.className='section-title'; head.textContent='Data & Filters'; card1.appendChild(head);
+  const ctl = document.createElement('div'); ctl.className='flex';
+  const pick = document.createElement('button'); pick.className='btn'; pick.textContent='Kies bestand'; pick.addEventListener('click', ()=> document.getElementById('fileInput').click());
+  const load = document.createElement('button'); load.className='btn'; load.textContent='Laad dataset'; load.addEventListener('click', loadSelectedFile);
+  const useDummy = document.createElement('button'); useDummy.className='btn btn-ghost'; useDummy.textContent='Gebruik dummy data';
+  useDummy.addEventListener('click', ()=>{ AppState.rows = DummyRows.slice(); AppState.schema=inferSchema(AppState.rows); AppState.usingDummy=true; buildDropdownFilters(); applyDropdownFilters(); navigate(); });
+  const name = document.createElement('div'); name.style.marginLeft='8px'; name.style.color='var(--muted)'; name.textContent = AppState.datasetName || 'Geen dataset geladen';
+  ctl.appendChild(pick); ctl.appendChild(load); ctl.appendChild(useDummy); ctl.appendChild(name);
+  card1.appendChild(ctl);
+
+  const filterRow = document.createElement('div'); filterRow.className='filter-row';
+  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); renderGrid(); }); g.appendChild(l); g.appendChild(s); return g; };
+  filterRow.appendChild(mk('Gemeente','ff_gemeente'));
+  filterRow.appendChild(mk('Sportbond','ff_sportbond'));
+  filterRow.appendChild(mk('Sport','ff_sport'));
+  filterRow.appendChild(mk('Doelgroep','ff_doelgroep'));
+  card1.appendChild(filterRow);
+
+  const reset = document.createElement('button'); reset.className='btn btn-ghost'; reset.textContent='Wis filters';
+  reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); renderGrid(); });
+  card1.appendChild(reset);
+
   mount.appendChild(card1);
 
-  // Card 2: Kerncijfers
+  // KPI grid card
   const card2 = document.createElement('div'); card2.className='card';
-  const t2 = document.createElement('div'); t2.className='section-title'; t2.innerHTML = '<span>Kerncijfers</span>';
-  card2.appendChild(t2);
-
-  renderFilterBadges();
-
-  const total = AppState.rows.length;
-  const current = AppState.filtered.length;
-
-  const grid = document.createElement('div');
-  grid.className = 'tile-grid';
-
-  grid.appendChild(createTile({ label: 'Totaal (alle rijen)', value: total }));
-  grid.appendChild(createTile({ label: 'Huidige selectie', value: current, sub: `${kpiPercent(current, total)}% van totaal` }));
-
-  if(AppState.mapping.group && AppState.schema.includes(AppState.mapping.group)){
-    grid.appendChild(createTile({ label: `Unieke "${AppState.mapping.group}" in selectie`, value: kpiUnique(AppState.filtered, AppState.mapping.group) }));
-  }
-
-  const numericFields = AppState.schema.filter(k => AppState.filtered.some(r => typeof r[k] === 'number'));
-  numericFields.slice(0,4).forEach(k => {
-    grid.appendChild(createTile({ label: `Som ${k} (selectie)`, value: kpiSum(AppState.filtered, k) }));
-  });
-
-  if(AppState.mapping.city && AppState.schema.includes(AppState.mapping.city)){
-    const withCity = AppState.filtered.filter(r => !!r[AppState.mapping.city]).length;
-    grid.appendChild(createTile({ label: `Records met ${AppState.mapping.city}`, value: kpiPercent(withCity, current) + '%', sub: `${withCity} van ${current}` }));
-  }
-
-  card2.appendChild(grid);
+  const t2 = document.createElement('div'); t2.className='section-title'; t2.textContent='Kerncijfers'; card2.appendChild(t2);
+  const grid = document.createElement('div'); grid.className='tile-grid fixed-4'; grid.id='kpiGrid'; card2.appendChild(grid);
   mount.appendChild(card2);
 
-  // Card 3: Overzicht (placeholder for extension; currently duplicates key totals to match layout density)
-  const card3 = document.createElement('div'); card3.className='card';
-  const t3 = document.createElement('div'); t3.className='section-title'; t3.innerHTML = '<span>Overzicht</span>';
-  card3.appendChild(t3);
-  const grid2 = document.createElement('div'); grid2.className='tile-grid';
-  grid2.appendChild(createTile({ label: 'Records', value: current }));
-  grid2.appendChild(createTile({ label: 'Unieke velden (schema)', value: AppState.schema.length }));
-  card3.appendChild(grid2);
-  mount.appendChild(card3);
+  buildDropdownFilters();
+  renderGrid();
+
+  function renderGrid(){
+    applyDropdownFilters();
+    const total = (AppState.rows.length||0);
+    const rows = AppState.filtered;
+    const current = rows.length||0;
+    const sum = (rows, f)=> rows.reduce((a,r)=> a + (typeof r[f]==='number'? r[f]:0), 0);
+    const uniq = (rows, f)=> new Set(rows.map(r=> r[f]).filter(Boolean)).size;
+    const pct = (a,b)=> b? Math.round((a/b)*1000)/10 : 0;
+    const ledenTot = sum(rows,'leden'); const vrijTot = sum(rows,'vrijwilligers');
+    const gemLeden = current ? Math.round(ledenTot/current) : 0;
+    const vrijPer100 = ledenTot ? Math.round((vrijTot/ledenTot)*1000)/10 : 0;
+    const hasLoc = rows.filter(r=> isFinite(Number(r.latitude)) && isFinite(Number(r.longitude))).length;
+    const avgContrib = Math.round(average(rows,'contributie'));
+    const maxV = rows.slice().sort((a,b)=> (b.leden||0)-(a.leden||0))[0];
+
+    const tiles = [
+      { label:'Verenigingen (selectie)', value: current },
+      { label:'Totaal leden', value: ledenTot },
+      { label:'Gem. leden per vereniging', value: gemLeden },
+      { label:'Vrijwilligers totaal', value: vrijTot },
+
+      { label:'Vrijwilligers per 100 leden', value: vrijPer100 },
+      { label:'Unieke sporten', value: uniq(rows,'sport') },
+      { label:'Unieke sportbonden', value: uniq(rows,'sportbond') },
+      { label:'Unieke gemeenten', value: uniq(rows,'gemeente') },
+
+      { label:'Met locatie', value: pct(hasLoc,current)+'%', sub: `${hasLoc}/${current}` },
+      { label:'Gem. contributie', value: fmtCurrency(avgContrib) },
+      { label:'Selectie / Totaal', xofy: `${current}/${total}`, sub: `${pct(current,total)}%` },
+      { label:'Meeste leden (vereniging)', value: maxV? maxV.leden:0, sub: maxV? maxV.naam:'—' }
+    ];
+
+    const grid = document.getElementById('kpiGrid'); grid.innerHTML='';
+    tiles.forEach(t => {
+      const d = document.createElement('div'); d.className='tile equal';
+      if(t.xofy){
+        d.innerHTML = `<div class="kpi-xofy">${t.xofy}</div><div class="label">${t.label}</div>${t.sub? `<div class="sub">${t.sub}</div>`:''}`;
+      }else{
+        d.innerHTML = `<div class="kpi kpi-metric">${formatKPI(t.value)}</div><div class="label">${t.label}</div>${t.sub? `<div class="sub">${t.sub}</div>`:''}`;
+      }
+      grid.appendChild(d);
+    });
+  }
 }
 
-/** ---------- Compare (Vergelijker) ---------- */
+/** Compare */
 function renderCompare(mount){
-  const wrapper = document.createElement('div'); wrapper.className='card';
-  const title = document.createElement('div'); title.className='section-title'; title.textContent='Vergelijker'; wrapper.appendChild(title);
-
-  const wrap = document.createElement('div');
-  wrap.className = 'split-2';
-
-  const left = document.createElement('div');
-  const right = document.createElement('div');
-  left.className = 'card'; right.className = 'card';
-
-  left.innerHTML = `<h3>Set A</h3>`;
-  right.innerHTML = `<h3>Set B</h3>`;
-
-  const setA = makeCompareBlock('A');
-  const setB = makeCompareBlock('B');
-
-  left.appendChild(setA.block);
-  right.appendChild(setB.block);
-
-  wrap.appendChild(left); wrap.appendChild(right);
-  wrapper.appendChild(wrap);
-  mount.appendChild(wrapper);
-
-  function update(){
-    renderCompareTiles(setA, left);
-    renderCompareTiles(setB, right);
-  }
-  setA.onChange = update;
-  setB.onChange = update;
-  update();
+  const card = document.createElement('div'); card.className='card';
+  const title = document.createElement('div'); title.className='section-title'; title.textContent='Vergelijker'; card.appendChild(title);
+  const p = document.createElement('div'); p.textContent = 'Coming soon: Gebruik filters links in Dashboard voor nu. (Functionaliteit blijft behouden.)';
+  card.appendChild(p); mount.appendChild(card);
 }
 
-function makeCompareBlock(label){
-  const block = document.createElement('div');
-  const selField = document.createElement('select');
-  const inpValue = document.createElement('input');
-  const btn = document.createElement('button');
-  selField.style.marginRight = '8px';
-  inpValue.placeholder = 'Filterwaarde...';
-  btn.textContent = 'Toepassen';
-  btn.className = 'btn'; btn.style.marginLeft = '8px';
-
-  AppState.schema.forEach(k => {
-    const opt = document.createElement('option'); opt.value=k; opt.textContent=k; selField.appendChild(opt);
-  });
-
-  block.appendChild(selField); block.appendChild(inpValue); block.appendChild(btn);
-  const tiles = document.createElement('div'); tiles.className = 'tile-grid'; tiles.style.marginTop = '12px';
-  block.appendChild(tiles);
-
-  const state = { field: null, value: '', rows: [] };
-  btn.addEventListener('click', ()=>{
-    state.field = selField.value; state.value = inpValue.value;
-    state.rows = AppState.rows.filter(r => ((r[state.field] ?? '') + '').toLowerCase().includes(state.value.toLowerCase()));
-    if(block.onChange) block.onChange();
-  });
-
-  return { block, state, tiles, onChange: null };
-}
-
-function renderCompareTiles(set, container){
-  const tiles = set.block.querySelector('.tile-grid');
-  tiles.innerHTML = '';
-  const total = AppState.rows.length;
-  const current = set.state.rows.length;
-
-  tiles.appendChild(createTile({ label: 'Rijen in set', value: current, sub: `${kpiPercent(current,total)}% van totaal` }));
-
-  if(AppState.mapping.group && AppState.schema.includes(AppState.mapping.group)){
-    tiles.appendChild(createTile({ label: `Unieke ${AppState.mapping.group}`, value: kpiUnique(set.state.rows, AppState.mapping.group) }));
-  }
-  const numericFields = AppState.schema.filter(k => set.state.rows.some(r => typeof r[k] === 'number'));
-  numericFields.slice(0,3).forEach(k => {
-    tiles.appendChild(createTile({ label: `Som ${k}`, value: kpiSum(set.state.rows, k) }));
-  });
-}
-
-/** ---------- Map (Kaart) ---------- */
+/** Map */
 function renderMap(mount){
   const wrapper = document.createElement('div'); wrapper.className='card';
   const title = document.createElement('div'); title.className='section-title'; title.textContent='Kaart'; wrapper.appendChild(title);
-
-  const card = document.createElement('div');
-  card.className = 'card';
-  const info = document.createElement('div');
-  info.className = 'stack';
-  info.innerHTML = `
-    <div><strong>Kaartweergave</strong></div>
-    <div class="sub">Zet in Instellingen de kolommen voor latitude/longitude. Zonder deze velden kan de kaart niet tekenen.</div>
-  `;
-  const mapWrap = document.createElement('div');
-  mapWrap.className = 'map-wrap';
-  mapWrap.id = 'map';
-  card.appendChild(info); card.appendChild(mapWrap);
-  wrapper.appendChild(card);
+  const mapWrap = document.createElement('div'); mapWrap.className='tile equal'; mapWrap.style.height='64vh'; mapWrap.id='map'; wrapper.appendChild(mapWrap);
   mount.appendChild(wrapper);
 
-  // Initialize Leaflet
-  const map = L.map('map').setView([52.1, 5.3], 7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
-
-  const latK = AppState.mapping.latitude;
-  const lonK = AppState.mapping.longitude;
-  if(!latK || !lonK){
-    return;
-  }
-  const pts = AppState.filtered
-    .map(r => ({ lat: Number(r[latK]), lon: Number(r[lonK]), name: AppState.mapping.name ? r[AppState.mapping.name] : null }))
-    .filter(p => isFinite(p.lat) && isFinite(p.lon));
-
-  pts.forEach(p => {
-    const m = L.marker([p.lat, p.lon]).addTo(map);
-    if(p.name) m.bindPopup(`<strong>${p.name}</strong>`);
-  });
-  if(pts.length){
-    const group = new L.featureGroup(pts.map(p => L.marker([p.lat, p.lon])));
-    map.fitBounds(group.getBounds().pad(0.25));
-  }
+  const rows = AppState.rows.length ? AppState.rows : DummyRows;
+  const map = L.map('map').setView([52.99,5.9], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  const pts = rows.map(r => ({lat:Number(r.latitude), lon:Number(r.longitude), name:r.naam})).filter(p => isFinite(p.lat)&&isFinite(p.lon));
+  pts.forEach(p =>{ const m=L.marker([p.lat,p.lon]).addTo(map); m.bindPopup(`<strong>${p.name}</strong>`); });
+  if(pts.length){ const g = L.featureGroup(pts.map(p=>L.marker([p.lat,p.lon]))); map.fitBounds(g.getBounds().pad(0.25)); }
 }
 
-/** ---------- Help (Uitleg) ---------- */
+/** Help */
 function renderHelp(mount){
-  const wrapper = document.createElement('div'); wrapper.className='card';
-  const title = document.createElement('div'); title.className='section-title'; title.textContent='Uitleg'; wrapper.appendChild(title);
-
-  const card = document.createElement('div'); card.className = 'card stack';
-  card.innerHTML = `
-    <h3>Uitleg</h3>
-    <p>Upload een <strong>.xlsx</strong> of <strong>.csv</strong> via de knop linksboven. De eerste sheet/het CSV-bestand wordt ingelezen.</p>
-    <ul>
-      <li>Pas filters toe via het veld- en waarde-invoer. Klik op een filterbadge om deze te verwijderen.</li>
-      <li>De tegels tonen aantallen en percentages op basis van de huidige selectie.</li>
-      <li>In <em>Vergelijker</em> kun je twee filtersets naast elkaar bekijken.</li>
-      <li>In <em>Kaart</em> toon je locaties als je <code>latitude</code> en <code>longitude</code> kolommen hebt ingesteld in <em>Instellingen</em>.</li>
-      <li>In <em>Instellingen</em> stel je branding en veldmapping in. Alles wordt lokaal opgeslagen.</li>
-    </ul>
-    <p>Er worden <strong>geen gegevens geüpload naar een server</strong>; alles draait in je browser.</p>
-  `;
-  wrapper.appendChild(card);
-  mount.appendChild(wrapper);
-}
-
-/** ---------- Settings (Instellingen) ---------- */
-function renderSettings(mount){
-  const wrapper = document.createElement('div'); wrapper.className='card';
-  const title = document.createElement('div'); title.className='section-title'; title.textContent='Instellingen'; wrapper.appendChild(title);
-
   const card = document.createElement('div'); card.className='card stack';
-  card.innerHTML = `<h3>Instellingen</h3>`;
+  const title = document.createElement('div'); title.className='section-title'; title.textContent='Uitleg'; card.appendChild(title);
+  const p = document.createElement('div'); p.innerHTML = '<p>Gebruik <strong>Kies bestand</strong> en daarna <strong>Laad dataset</strong> om data zichtbaar te maken. Pas vervolgens de 4 filters toe om de tegels te sturen. Alles draait lokaal in je browser.</p>'; card.appendChild(p);
+  mount.appendChild(card);
+}
 
-  // Branding
-  const themeBlock = document.createElement('div'); themeBlock.className='stack';
-  themeBlock.innerHTML = `
-    <h4>Branding</h4>
-    <div class="flex">
-      <label class="stack" style="flex:1">
-        <span>Merk-kleur (brand)</span>
-        <input type="color" id="brandColor" value="${AppState.theme.brand}"/>
-      </label>
-      <label class="stack" style="flex:1">
-        <span>Accent-kleur</span>
-        <input type="color" id="accentColor" value="${AppState.theme.accent}"/>
-      </label>
-    </div>
-  `;
-
-  // Mapping
-  const mappingBlock = document.createElement('div'); mappingBlock.className='stack';
-  mappingBlock.innerHTML = `<h4>Veldmapping</h4>`;
-  const fields = ['name','city','group','latitude','longitude'];
-  fields.forEach(f => {
-    const sel = document.createElement('select'); sel.id = `map_${f}`;
-    const wrap = document.createElement('div'); wrap.className='stack';
-    const label = document.createElement('span'); label.textContent = `${f}`;
-    const noneOpt = document.createElement('option'); noneOpt.value=''; noneOpt.textContent='(geen)';
-    sel.appendChild(noneOpt);
-    AppState.schema.forEach(k => {
-      const opt = document.createElement('option'); opt.value=k; opt.textContent=k; sel.appendChild(opt);
-    });
-    if(AppState.mapping[f]) sel.value = AppState.mapping[f];
-    wrap.appendChild(label); wrap.appendChild(sel);
-    mappingBlock.appendChild(wrap);
-  });
-
-  const saveBtn = document.createElement('button'); saveBtn.textContent='Opslaan'; saveBtn.className='btn';
-  saveBtn.addEventListener('click', ()=>{
-    const brand = document.getElementById('brandColor').value;
-    const accent = document.getElementById('accentColor').value;
-    setVar('--brand', brand); setVar('--accent', accent);
-    AppState.theme.brand = brand; AppState.theme.accent = accent;
-    ['name','city','group','latitude','longitude'].forEach(f => {
-      const v = document.getElementById(`map_${f}`).value || null;
-      AppState.mapping[f] = v;
-    });
-    saveState();
-    alert('Instellingen opgeslagen ✅');
-  });
-
-  card.appendChild(themeBlock);
-  card.appendChild(mappingBlock);
-  card.appendChild(saveBtn);
-
-  wrapper.appendChild(card);
+/** Settings */
+function renderSettings(mount){
+  const wrapper = document.createElement('div'); wrapper.className='card stack';
+  const title = document.createElement('div'); title.className='section-title'; title.textContent='Instellingen'; wrapper.appendChild(title);
+  const theme = document.createElement('div'); theme.className='flex';
+  const inBrand = document.createElement('input'); inBrand.type='color'; inBrand.value=getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()||'#212945';
+  const inAccent = document.createElement('input'); inAccent.type='color'; inAccent.value=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#52E8E8';
+  const save = document.createElement('button'); save.className='btn'; save.textContent='Opslaan';
+  save.addEventListener('click', ()=>{ document.documentElement.style.setProperty('--brand', inBrand.value); document.documentElement.style.setProperty('--accent', inAccent.value); AppState.theme.brand=inBrand.value; AppState.theme.accent=inAccent.value; saveState(); alert('Instellingen opgeslagen ✅'); });
+  theme.append('Merk-kleur', inBrand, 'Accent-kleur', inAccent, save); wrapper.appendChild(theme);
   mount.appendChild(wrapper);
 }
 
-/** ---------- Boot ---------- */
+/** Boot */
 navigate();
-
-/** Enhance filter field after load */
-function afterLoad(){
-  populateFilterField();
-}
-document.addEventListener('DOMContentLoaded', afterLoad);
