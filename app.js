@@ -2523,6 +2523,20 @@ function titleSuffix(){
   return parts.length ? ' - ' + parts.join(' - ') : '';
 }
 
+
+function titleSuffix(){
+  const parts = [];
+  if(FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
+  if(FixedFilters.sportbond) parts.push(FixedFilters.sportbond);
+  if(FixedFilters.sport) parts.push(FixedFilters.sport);
+  if(FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
+  return parts.length ? ' - ' + parts.join(' - ') : '';
+}
+function updateKpiTitle(){
+  const el = document.getElementById('kpiTitle');
+  if(el){ el.textContent = 'Kerncijfers' + titleSuffix(); }
+}
+
 /** Dashboard */
 async function loadSelectedFile(){
   const file = AppState.pendingFile;
@@ -2533,7 +2547,7 @@ async function loadSelectedFile(){
     const data = await file.arrayBuffer(); const wb = XLSX.read(data,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
     AppState.rows = XLSX.utils.sheet_to_json(ws,{defval:null});
   }
-  AppState.schema = inferSchema(AppState.rows); AppState.usingDummy = false; AppState.filters=[]; applyDropdownFilters(); buildDropdownFilters(); navigate();
+  AppState.schema = inferSchema(AppState.rows); AppState.usingDummy = false; AppState.filters=[]; applyDropdownFilters(); buildDropdownFilters(); navigate(); updateKpiTitle();
 }
 
 function renderDashboard(mount){
@@ -2554,7 +2568,7 @@ function renderDashboard(mount){
   card1.appendChild(ctl);
 
   const filterRow = document.createElement('div'); filterRow.className='filter-row';
-  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); renderGrid(); }); g.appendChild(l); g.appendChild(s); return g; };
+  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); updateKpiTitle(); renderGrid(); }); g.appendChild(l); g.appendChild(s); return g; };
   filterRow.appendChild(mk('Gemeente','ff_gemeente'));
   filterRow.appendChild(mk('Sportbond','ff_sportbond'));
   filterRow.appendChild(mk('Sport','ff_sport'));
@@ -2562,7 +2576,7 @@ function renderDashboard(mount){
   card1.appendChild(filterRow);
 
   const reset = document.createElement('button'); reset.className='btn btn-ghost'; reset.textContent='Wis filters';
-  reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); renderGrid(); });
+  reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); updateKpiTitle(); renderGrid(); });
   card1.appendChild(reset);
 
   mount.appendChild(card1);
@@ -2574,9 +2588,11 @@ function renderDashboard(mount){
   mount.appendChild(card2);
 
   buildDropdownFilters();
+  updateKpiTitle();
   renderGrid();
 
   function renderGrid(){
+    updateKpiTitle();
     const titleEl = document.getElementById('kpiTitle'); if(titleEl) titleEl.textContent = 'Kerncijfers' + titleSuffix();
     applyDropdownFilters();
     const total = (AppState.rows.length||0);
