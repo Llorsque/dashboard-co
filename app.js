@@ -2441,14 +2441,49 @@ function uniqueValues(rows, field){ return Array.from(new Set(rows.map(r => r[fi
 function average(rows, field){ if(!rows.length) return 0; const sum = rows.reduce((a,r)=> a + (typeof r[field]==='number'? r[field]:0), 0); return sum/rows.length; }
 function fmtCurrency(v){ return (v||0).toLocaleString('nl-NL', { style:'currency', currency:'EUR', maximumFractionDigits:0 }); }
 function formatKPI(v){ if(typeof v==='number'){ if(Number.isInteger(v)) return v.toLocaleString('nl-NL'); return v.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1}); } return v; }
+
+function detectDelimiter(header){
+  const c = (header.match(/,/g)||[]).length;
+  const s = (header.match(/;/g)||[]).length;
+  return s > c ? ';' : ',';
+}
+function splitCSVLine(line, delim){
+  const out=[]; let cur=''; let inq=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch === '"'){
+      if(inq && line[i+1] === '"'){ cur+='"'; i++; }
+      else inq = !inq;
+    } else if(ch === delim && !inq){
+      out.push(cur); cur='';
+    } else { cur+=ch; }
+  }
+  out.push(cur);
+  return out;
+}
 function parseCSV(text){
   const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
-  const headers = lines.shift().split(',').map(h=>h.trim());
-  const out = [];
-  for(const line of lines){
-    const parts = []; const re=/(?:^|,)("(?:(?:"")*[^"]*)*"|[^,]*)/g; let m;
-    let i=0;
-    while(m = re.exec(line)){ let v = m[1]; if(v.startsWith(',')) v=v.slice(1); v=v.replace(/^"|"$/g,'').replace(/""/g,'"'); parts.push(v); i++; }
+  const headerLine = lines.shift();
+  const delim = detectDelimiter(headerLine);
+  const headers = splitCSVLine(headerLine, delim).map(h=>h.trim());
+  return lines.map(line => {
+    const parts = splitCSVLine(line, delim);
+    const obj = {};
+    headers.forEach((h, i) => {
+      let v = parts[i] !== undefined ? parts[i] : '';
+      v = v.trim();
+      // numeric coercion with NL decimal comma support
+      if(v === ''){ obj[h] = null; }
+      else if(/^-?\d+,\d+$/.test(v) && !v.includes('.')){ obj[h] = Number(v.replace(',', '.')); }
+      else if(!isNaN(Number(v)) && v.trim() !== ''){ obj[h] = Number(v); }
+      else if(v.toLowerCase() === 'true'){ obj[h] = true; }
+      else if(v.toLowerCase() === 'false'){ obj[h] = false; }
+      else { obj[h] = v; }
+    });
+    return obj;
+  });
+}
+
     const obj = {}; headers.forEach((h,i)=>{
       const raw = parts[i] ?? '';
       const n = Number(raw);
@@ -2460,6 +2495,27 @@ function parseCSV(text){
     out.push(obj);
   }
   return out;
+}
+
+
+function findKeyInsensitive(obj, candidates){
+  const keys = Object.keys(obj);
+  for(const c of candidates){
+    const hit = keys.find(k => k.toLowerCase() === c.toLowerCase());
+    if(hit) return hit;
+  }
+  return null;
+}
+function normalizeLatLon(rows){
+  if(!rows || !rows.length) return { latK: null, lonK: null };
+  const sample = rows[0];
+  const latK = AppState.mapping.latitude || findKeyInsensitive(sample, ['latitude','lat','y','koord_y','breedtegraad']);
+  const lonK = AppState.mapping.longitude || findKeyInsensitive(sample, ['longitude','lon','lng','x','koord_x','lengtegraad']);
+  rows.forEach(r => {
+    if(latK && typeof r[latK] === 'string' && /^-?\d+,\d+$/.test(r[latK])) r[latK] = Number(r[latK].replace(',','.'));
+    if(lonK && typeof r[lonK] === 'string' && /^-?\d+,\d+$/.test(r[lonK])) r[lonK] = Number(r[lonK].replace(',','.'));
+  });
+  return { latK, lonK };
 }
 
 /** Router */
@@ -2548,7 +2604,7 @@ async function loadSelectedFile(){
     const data = await file.arrayBuffer(); const wb = XLSX.read(data,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
     AppState.rows = XLSX.utils.sheet_to_json(ws,{defval:null});
   }
-  AppState.schema = inferSchema(AppState.rows); AppState.usingDummy = false; AppState.filters=[]; applyDropdownFilters(); buildDropdownFilters(); navigate(); updateKpiTitle();
+  AppState.schema = inferSchema(AppState.rows); AppState.usingDummy = false; AppState.filters=[]; normalizeLatLon(AppState.rows); applyDropdownFilters(); buildDropdownFilters(); navigate(); updateKpiTitle(); renderList && renderList();
 }
 
 function renderDashboard(mount){
@@ -2563,13 +2619,13 @@ function renderDashboard(mount){
   const pick = document.createElement('button'); pick.className='btn'; pick.textContent='Kies bestand'; pick.addEventListener('click', ()=> document.getElementById('fileInput').click());
   const load = document.createElement('button'); load.className='btn'; load.textContent='Laad dataset'; load.addEventListener('click', loadSelectedFile);
   const useDummy = document.createElement('button'); useDummy.className='btn btn-ghost'; useDummy.textContent='Gebruik dummy data';
-  useDummy.addEventListener('click', ()=>{ AppState.rows = DummyRows.slice(); AppState.schema=inferSchema(AppState.rows); AppState.usingDummy=true; buildDropdownFilters(); applyDropdownFilters(); navigate(); });
+  useDummy.addEventListener('click', ()=>{ AppState.rows = DummyRows.slice(); AppState.schema=inferSchema(AppState.rows); AppState.usingDummy=true; normalizeLatLon(AppState.rows); buildDropdownFilters(); applyDropdownFilters(); navigate(); });
   const name = document.createElement('div'); name.style.marginLeft='8px'; name.style.color='var(--muted)'; name.textContent = AppState.datasetName || 'Geen dataset geladen';
   ctl.appendChild(pick); ctl.appendChild(load); ctl.appendChild(useDummy); ctl.appendChild(name);
   card1.appendChild(ctl);
 
   const filterRow = document.createElement('div'); filterRow.className='filter-row';
-  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); updateKpiTitle(); renderGrid(); }); g.appendChild(l); g.appendChild(s); return g; };
+  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); updateKpiTitle(); renderGrid(); renderList(); }); g.appendChild(l); g.appendChild(s); return g; };
   filterRow.appendChild(mk('Gemeente','ff_gemeente'));
   filterRow.appendChild(mk('Sportbond','ff_sportbond'));
   filterRow.appendChild(mk('Sport','ff_sport'));
@@ -2577,7 +2633,7 @@ function renderDashboard(mount){
   card1.appendChild(filterRow);
 
   const reset = document.createElement('button'); reset.className='btn btn-ghost'; reset.textContent='Wis filters';
-  reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); updateKpiTitle(); renderGrid(); });
+  reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); updateKpiTitle(); renderGrid(); renderList(); });
   card1.appendChild(reset);
 
   mount.appendChild(card1);
@@ -2588,9 +2644,16 @@ function renderDashboard(mount){
   const grid = document.createElement('div'); grid.className='tile-grid fixed-4'; grid.id='kpiGrid'; card2.appendChild(grid);
   mount.appendChild(card2);
 
+  // Selection list card
+  const card3 = document.createElement('div'); card3.className='card';
+  const t3 = document.createElement('div'); t3.className='section-title'; t3.id='selTitle'; t3.textContent='Selectie'; card3.appendChild(t3);
+  const list = document.createElement('div'); list.className='sel-list'; list.id='selList'; card3.appendChild(list);
+  mount.appendChild(card3);
+
   buildDropdownFilters();
   updateKpiTitle();
   renderGrid();
+  renderList();
 
   function renderGrid(){
     updateKpiTitle();
@@ -2639,6 +2702,26 @@ function renderDashboard(mount){
   }
 }
 
+  function renderList(){
+    applyDropdownFilters();
+    const rows = AppState.filtered || [];
+    const listEl = document.getElementById('selList');
+    const titleEl = document.getElementById('selTitle');
+    if(!listEl) return;
+    listEl.innerHTML = '';
+    if(titleEl){ titleEl.textContent = `Selectie (${rows.length})`; }
+    if(!rows.length){
+      const empty = document.createElement('div'); empty.className='sel-empty'; empty.textContent='Geen resultaten met deze filters'; listEl.appendChild(empty);
+      return;
+    }
+    rows.forEach(r => {
+      const name = (r.naam ?? '').toString().trim();
+      const item = document.createElement('div'); item.className='sel-item';
+      item.textContent = name || '(naam onbekend)';
+      listEl.appendChild(item);
+    });
+  }
+
 /** Compare */
 function renderCompare(mount){
   const card = document.createElement('div'); card.className='card';
@@ -2664,6 +2747,7 @@ function renderMap(mount){
   const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle'; title.textContent='Kaart' + titleSuffix(); wrapper.appendChild(title);
   const mapCount = document.createElement('div'); mapCount.className='sub'; mapCount.id='mapCount'; wrapper.appendChild(mapCount);
   const mapWrap = document.createElement('div'); mapWrap.className='tile equal'; mapWrap.style.height='64vh'; mapWrap.id='map'; wrapper.appendChild(mapWrap);
+    const hard = document.createElement('button'); hard.className='btn btn-ghost'; hard.textContent='Volledige reset (cache & instellingen)'; hard.addEventListener('click', ()=>{ localStorage.clear(); location.reload(); }); wrapper.appendChild(hard);
   mount.appendChild(wrapper);
 
   // Ensure data exists and apply active dropdown filters from dashboard
@@ -2748,6 +2832,7 @@ function renderSettings(mount){
   const save = document.createElement('button'); save.className='btn'; save.textContent='Opslaan';
   save.addEventListener('click', ()=>{ document.documentElement.style.setProperty('--brand', inBrand.value); document.documentElement.style.setProperty('--accent', inAccent.value); AppState.theme.brand=inBrand.value; AppState.theme.accent=inAccent.value; saveState(); alert('Instellingen opgeslagen ✅'); });
   theme.append('Merk-kleur', inBrand, 'Accent-kleur', inAccent, save); wrapper.appendChild(theme);
+    const hard = document.createElement('button'); hard.className='btn btn-ghost'; hard.textContent='Volledige reset (cache & instellingen)'; hard.addEventListener('click', ()=>{ localStorage.clear(); location.reload(); }); wrapper.appendChild(hard);
   mount.appendChild(wrapper);
 }
 

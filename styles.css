@@ -73,3 +73,8 @@ input[type=file]{display:none}
 .pp-row{ display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
 .pp-k{ color: var(--muted); font-size:12px; }
 .pp-v{ font-weight:600; font-size:13px; }
+
+/* Selection list under KPI tiles */
+.sel-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto;padding:4px 0}
+.sel-item{padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;box-shadow:var(--shadow)}
+.sel-empty{color:var(--muted);font-size:13px}
