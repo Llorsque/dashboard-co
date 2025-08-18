@@ -2,13 +2,6 @@
 function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 function setVar(name, val){ document.documentElement.style.setProperty(name, val); }
 
-
-/* === Config (Instellingen) === */
-const ZeroPointConfig = { tileOrder: Array.from({length:12}, (_,i)=>i), tileLabels: {} };
-function loadConfig(){ try{ const raw=localStorage.getItem('SF_CONFIG_V1'); if(!raw) return structuredClone(ZeroPointConfig); const p=JSON.parse(raw); if(!Array.isArray(p.tileOrder)||p.tileOrder.length!==12) p.tileOrder=structuredClone(ZeroPointConfig.tileOrder); if(typeof p.tileLabels!=='object'||p.tileLabels===null) p.tileLabels={}; return p; }catch(e){ return structuredClone(ZeroPointConfig); } }
-function saveConfig(cfg){ try{ localStorage.setItem('SF_CONFIG_V1', JSON.stringify(cfg)); return true; }catch(e){ return false; } }
-window.Config = loadConfig();
-
 const AppState = {
   rows: [],
   filtered: [],
@@ -2463,8 +2456,7 @@ function splitCSVLine(line, delim){
       else inq = !inq;
     } else if(ch === delim && !inq){
       out.push(cur); cur='';
-    } else if(h==='#/settings'){ renderSettings(); }
-else { cur+=ch; }
+    } else { cur+=ch; }
   }
   out.push(cur);
   return out;
@@ -2486,8 +2478,7 @@ function parseCSV(text){
       else if(!isNaN(Number(v)) && v.trim() !== ''){ obj[h] = Number(v); }
       else if(v.toLowerCase() === 'true'){ obj[h] = true; }
       else if(v.toLowerCase() === 'false'){ obj[h] = false; }
-      else if(h==='#/settings'){ renderSettings(); }
-else { obj[h] = v; }
+      else { obj[h] = v; }
     });
     return obj;
   });
@@ -2643,7 +2634,11 @@ function renderDashboard(mount){
 
   // Selection list card
   const card3 = document.createElement('div'); card3.className='card';
-  const t3 = document.createElement('div'); t3.className='section-title'; t3.id='selTitle'; t3.textContent='Selectie'; card3.appendChild(t3);
+  const titleRow = document.createElement('div'); titleRow.className='section-title-row';
+const t3 = document.createElement('div'); t3.className='section-title'; t3.id='selTitle'; t3.textContent='Selectie';
+const dl = document.createElement('button'); dl.className='btn'; dl.id='btnExportSel'; dl.textContent='Download selectie (CSV)'; dl.addEventListener('click', exportSelectionCSV);
+const dlx = document.createElement('button'); dlx.className='btn btn-ghost'; dlx.id='btnExportSelX'; dlx.textContent='Download selectie (XLSX)'; dlx.addEventListener('click', exportSelectionXLSX);
+titleRow.appendChild(t3); titleRow.appendChild(dlx); titleRow.appendChild(dl); card3.appendChild(titleRow);
   const list = document.createElement('div'); list.className='sel-list'; list.id='selList'; card3.appendChild(list);
   mount.appendChild(card3);
 
@@ -2811,6 +2806,71 @@ function buildPopup(row){
   </div>`;
 }
 
+
+/** --- Export helpers --- */
+function slug(v){
+  return String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').replace(/^_+|_+$/g,'').toLowerCase();
+}
+function csvEscape(val){
+  if(val===null||val===undefined) return '';
+  const s = String(val);
+  if(/[",\n]/.test(s)){
+    return '"' + s.replace(/"/g,'""') + '"';
+  }
+  return s;
+}
+function buildCSV(rows){
+  if(!rows || !rows.length){
+    return 'naam,gemeente,sportbond,sport,doelgroep,leden,vrijwilligers,contributie,latitude,longitude';
+  }
+  const pref = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
+  const keySet = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
+  const rest = Array.from(keySet).filter(k => !pref.includes(k));
+  const headers = pref.concat(rest);
+  const headerLine = headers.join(',');
+  const lines = rows.map(r => headers.map(h => csvEscape(r[h])).join(','));
+  return [headerLine].concat(lines).join('\r\n');
+}
+function downloadBlob(content, filename, type='text/csv;charset=utf-8;'){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+}
+function getFilteredRowsFallback(){
+  if(Array.isArray(AppState.filtered)) return AppState.filtered;
+  const rows = Array.isArray(AppState.rows) && AppState.rows.length ? AppState.rows : (typeof DummyRows!=='undefined'? DummyRows: []);
+  // Apply FixedFilters if present
+  const f = (FixedFilters||{});
+  return rows.filter(r =>
+    (!f.gemeente || r.gemeente===f.gemeente) &&
+    (!f.sportbond || r.sportbond===f.sportbond) &&
+    (!f.sport || r.sport===f.sport) &&
+    (!f.doelgroep || r.doelgroep===f.doelgroep)
+  );
+}
+function exportSelectionCSV(){
+  try{
+    if(typeof applyDropdownFilters==='function'){ applyDropdownFilters(); }
+  }catch(e){ /* ignore */ }
+  const rows = getFilteredRowsFallback();
+  const parts = [];
+  if(FixedFilters && FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
+  if(FixedFilters && FixedFilters.sportbond) parts.push(FixedFilters.sportbond);
+  if(FixedFilters && FixedFilters.sport) parts.push(FixedFilters.sport);
+  if(FixedFilters && FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
+  const d = new Date();
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+  const fname = `selectie_${y}-${m}-${dd}` + (parts.length?`_${slug(parts.join('_'))}`:'') + `.csv`;
+  const csv = buildCSV(rows);
+  downloadBlob(csv, fname);
+}
+
 /** Help */
 function renderHelp(mount){
   const card = document.createElement('div'); card.className='card stack';
@@ -2835,3 +2895,34 @@ function renderSettings(mount){
 
 /** Boot */
 navigate();
+
+function exportSelectionXLSX(){
+  try{ if(typeof applyDropdownFilters==='function'){ applyDropdownFilters(); } }catch(e){}
+  const rows = getFilteredRowsFallback();
+  const pref = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
+  const keySet = new Set();
+  rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
+  const rest = Array.from(keySet).filter(k => !pref.includes(k));
+  const headers = pref.concat(rest);
+  const data = [headers].concat(rows.map(r => headers.map(h => r[h] ?? '')));
+  if(typeof XLSX === 'undefined' || !XLSX || !XLSX.utils){
+    // Fallback to CSV if SheetJS not loaded
+    const csv = data.map(row => row.map(v => (v==null?'':String(v).replace(/"/g,'""'))).map(v => /[",\n]/.test(v)?`"${v}"`:v).join(',')).join('\r\n');
+    const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+    const fname = `selectie_${y}-${m}-${dd}.csv`;
+    downloadBlob(csv, fname, 'text/csv;charset=utf-8;'); return;
+  }
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Selectie");
+  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+  const parts = [];
+  if(FixedFilters && FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
+  if(FixedFilters && FixedFilters.sportbond) parts.push(FixedFilters.sportbond);
+  if(FixedFilters && FixedFilters.sport) parts.push(FixedFilters.sport);
+  if(FixedFilters && FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
+  const fname = `selectie_${y}-${m}-${dd}` + (parts.length?`_${slug(parts.join('_'))}`:'') + `.xlsx`;
+  downloadBlob(wbout, fname, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
