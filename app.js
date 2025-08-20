@@ -2755,9 +2755,8 @@ const reset = document.createElement('button'); reset.className='btn btn-ghost';
   function renderGrid(){
     updateKpiTitle();
     const titleEl = document.getElementById('kpiTitle'); if(titleEl) titleEl.textContent = 'Kerncijfers' + titleSuffix();
-    applyDropdownFilters();
     const total = (AppState.rows.length||0);
-    const rows = AppState.filtered;
+    const rows = (AppState.filtered && AppState.filtered.length? AppState.filtered : AppState.rows);
     const current = rows.length||0;
     const sum = (rows, f)=> rows.reduce((a,r)=> a + (typeof r[f]==='number'? r[f]:0), 0);
     const uniq = (rows, f)=> new Set(rows.map(r=> r[f]).filter(Boolean)).size;
@@ -2800,8 +2799,7 @@ const reset = document.createElement('button'); reset.className='btn btn-ghost';
 }
 
   function renderList(){
-    applyDropdownFilters();
-    const rows = AppState.filtered || [];
+    const rows = (AppState.filtered && AppState.filtered.length? AppState.filtered : AppState.rows) || [];
     const listEl = document.getElementById('selList');
     const titleEl = document.getElementById('selTitle');
     if(!listEl) return;
