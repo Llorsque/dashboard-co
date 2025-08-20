@@ -2630,12 +2630,6 @@ function buildDropdownFilters(){
 
   bar.appendChild(row); bar.appendChild(actions);
 }
-);
-    if(keep && Array.from(el.options).some(o=>o.value===keep)) el.value=keep;
-  };
-  setSel('ff_gemeente','gemeente'); setSel('ff_sportbond','sportbond'); setSel('ff_sport','sport'); setSel('ff_doelgroep','doelgroep');
-}
-
 function applyDropdownFilters(){
   const rows = Array.isArray(AppState.rows) ? AppState.rows : [];
   const F = AppState.filters || {};
@@ -2698,7 +2692,7 @@ function updateKpiTitle(){
   addSet(F.msGemeente); addSet(F.msSport); addSet(F.msImpact); addSet(F.msType);
   el.textContent = bits.join(' - ');
 }
-}
+
 
 /** Dashboard */
 async function loadSelectedFile(){
