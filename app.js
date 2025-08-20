@@ -31,7 +31,8 @@ function parseCSV(text){
       else if(c===',') push();
       else if(c==='
 '){ push(); endRec(); }
-      else if(c===''){} else field+=c;
+      else if(c==='
+'){} else field+=c;
     }
   }
   if(field.length || rec.length){ push(); endRec(); }
@@ -216,7 +217,7 @@ function renderMap(mount){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
 
   const rows = AppState.filtered && AppState.filtered.length ? AppState.filtered : AppState.rows;
-  const pts = rows.filter(r=>Number.isFinite(r.latitude)&&Number.isFinite(r.longitude)).map(r=>({lat:r.latitude, lon:r.longitude, row:r}));
+  const pts = (rows||[]).filter(r=>r && Number.isFinite(r.latitude) && Number.isFinite(r.longitude)).map(r=>({lat:r.latitude, lon:r.longitude, row:r}));
   const markers=[];
   pts.forEach(p=>{
     const m=L.marker([p.lat,p.lon]).addTo(map);
@@ -229,8 +230,8 @@ function renderMap(mount){
   }
 }
 function popupHTML(r){
-  const addr = [r.adres, r.huisnummer, r.postcode, r.plaats].filter(Boolean).join(' ');
-  const lines = [
+  const addr = r ? [r.adres, r.huisnummer, r.postcode, r.plaats].filter(Boolean).join(' ') : '';
+  const lines = r ? [
     `<strong>${safe(r.naam,'Onbekend')}</strong>`,
     `${safe(r.sport)} (${safe(r.sportbond)})`,
     addr ? addr : '',
@@ -247,7 +248,7 @@ function renderDashboard(mount){
   card1.appendChild(el('div','section-title','Data & Filters'));
   // host builds file row + filters
   const host = buildFiltersHost(card1);
-  card1.appendChild(host);
+  if(host && host.nodeType===1){ card1.appendChild(host); }
   mount.appendChild(card1);
 
   // Card 2: KPI grid
@@ -287,3 +288,29 @@ function navigate(){
 }
 window.addEventListener('hashchange', navigate);
 document.addEventListener('DOMContentLoaded', navigate);
+
+
+// ---- Global error overlay & guarded navigate ----
+(function(){
+  function show(err){
+    const el = document.getElementById('errorOverlay');
+    const pre = document.getElementById('errorOverlayText');
+    if(el && pre){
+      pre.textContent = (err && err.stack) ? err.stack : String(err);
+      el.style.display = 'block';
+      const c = document.getElementById('errorOverlayClose');
+      if(c) c.onclick = ()=>{ el.style.display='none'; };
+    } else {
+      alert('Fout: ' + err);
+    }
+  }
+  window.__showErrorOverlay = show;
+  window.addEventListener('error', (e)=>{ show(e.error || e.message || e); });
+  window.addEventListener('unhandledrejection', (e)=>{ show(e.reason || e); });
+})();
+// Guarded navigate wrapper
+const __origNavigate = navigate;
+navigate = function(){
+  try { __origNavigate(); }
+  catch(err){ window.__showErrorOverlay(err); }
+};
