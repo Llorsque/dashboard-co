@@ -3,72 +3,7 @@ function getVar(name){ return getComputedStyle(document.documentElement).getProp
 function setVar(name, val){ document.documentElement.style.setProperty(name, val); }
 
 
-/* === Multi-select helpers === */
-function getRowImpactLabels(row){
-  const labs = [];
-  if(Number(row.impact_0_4)===1) labs.push('0-4 jaar');
-  if(Number(row.impact_4_12)===1) labs.push('4-12 jaar');
-  if(Number(row.impact_jongeren)===1) labs.push('Jongeren');
-  if(Number(row.impact_volwassenen)===1) labs.push('Volwassenen');
-  if(Number(row.impact_senioren)===1) labs.push('Senioren');
-  if(Number(row.impact_aangepast)===1) labs.push('Aangepast Sporten');
-  return labs;
-}
-function normalizeProviderType(v){
-  const s = String(v||'').toLowerCase().trim();
-  if(!s) return 'Sportaanbieder non-profit';
-  if(s.includes('profit') && !s.includes('non')) return 'Sportaanbieder profit';
-  if(s.includes('non') || s.includes('vereniging') || s.includes('stichting')) return 'Sportaanbieder non-profit';
-  if(s.includes('vereniging') || s.includes('club')) return 'Sportaanbieder non-profit';
-  return s.includes('profit') ? 'Sportaanbieder profit' : 'Sportaanbieder non-profit';
-}
-function getProviderType(row){
-  const v = row.type_aanbieder ?? row.aanbieder_type ?? row.type ?? row.soort ?? '';
-  return normalizeProviderType(v);
-}
-function createMultiSelect({id,label,options,selected,onChange}){
-  const wrap = document.createElement('div');
-  wrap.className = 'ms-wrap';
-  const btn = document.createElement('button');
-  btn.className = 'ms-btn';
-  btn.type = 'button';
-  const setTitle = ()=>{
-    const n = selected.size;
-    btn.textContent = n>0 ? `${label} (${n})` : `${label} (Alle)`;
-  };
-  setTitle();
-  btn.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    wrap.classList.toggle('open');
-  });
-  const panel = document.createElement('div');
-  panel.className = 'ms-panel';
-  const list = document.createElement('div');
-  list.className = 'ms-list';
-  options.forEach(opt=>{
-    const item = document.createElement('label');
-    item.className = 'ms-item';
-    const cb = document.createElement('input');
-    cb.type='checkbox';
-    cb.value = opt;
-    cb.checked = selected.has(opt);
-    cb.addEventListener('change', ()=>{
-      if(cb.checked) selected.add(opt); else selected.delete(opt);
-      setTitle();
-      onChange && onChange();
-    });
-    const span = document.createElement('span');
-    span.textContent = opt;
-    item.appendChild(cb); item.appendChild(span);
-    list.appendChild(item);
-  });
-  panel.appendChild(list);
-  wrap.appendChild(btn);
-  wrap.appendChild(panel);
-  document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) wrap.classList.remove('open'); });
-  return wrap;
-}
-
+function __safe(fn){ try{ return fn && fn(); } catch(e){ console.error('UI render error:', e); } }
 const AppState = {
   rows: [],
   filtered: [],
@@ -2508,69 +2443,25 @@ function uniqueValues(rows, field){ return Array.from(new Set(rows.map(r => r[fi
 function average(rows, field){ if(!rows.length) return 0; const sum = rows.reduce((a,r)=> a + (typeof r[field]==='number'? r[field]:0), 0); return sum/rows.length; }
 function fmtCurrency(v){ return (v||0).toLocaleString('nl-NL', { style:'currency', currency:'EUR', maximumFractionDigits:0 }); }
 function formatKPI(v){ if(typeof v==='number'){ if(Number.isInteger(v)) return v.toLocaleString('nl-NL'); return v.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1}); } return v; }
-
-function detectDelimiter(header){
-  const c = (header.match(/,/g)||[]).length;
-  const s = (header.match(/;/g)||[]).length;
-  return s > c ? ';' : ',';
-}
-function splitCSVLine(line, delim){
-  const out=[]; let cur=''; let inq=false;
-  for(let i=0;i<line.length;i++){
-    const ch=line[i];
-    if(ch === '"'){
-      if(inq && line[i+1] === '"'){ cur+='"'; i++; }
-      else inq = !inq;
-    } else if(ch === delim && !inq){
-      out.push(cur); cur='';
-    } else { cur+=ch; }
-  }
-  out.push(cur);
-  return out;
-}
 function parseCSV(text){
   const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
-  const headerLine = lines.shift();
-  const delim = detectDelimiter(headerLine);
-  const headers = splitCSVLine(headerLine, delim).map(h=>h.trim());
-  return lines.map(line => {
-    const parts = splitCSVLine(line, delim);
-    const obj = {};
-    headers.forEach((h, i) => {
-      let v = parts[i] !== undefined ? parts[i] : '';
-      v = v.trim();
-      // numeric coercion with NL decimal comma support
-      if(v === ''){ obj[h] = null; }
-      else if(/^-?\d+,\d+$/.test(v) && !v.includes('.')){ obj[h] = Number(v.replace(',', '.')); }
-      else if(!isNaN(Number(v)) && v.trim() !== ''){ obj[h] = Number(v); }
-      else if(v.toLowerCase() === 'true'){ obj[h] = true; }
-      else if(v.toLowerCase() === 'false'){ obj[h] = false; }
-      else { obj[h] = v; }
+  const headers = lines.shift().split(',').map(h=>h.trim());
+  const out = [];
+  for(const line of lines){
+    const parts = []; const re=/(?:^|,)("(?:(?:"")*[^"]*)*"|[^,]*)/g; let m;
+    let i=0;
+    while(m = re.exec(line)){ let v = m[1]; if(v.startsWith(',')) v=v.slice(1); v=v.replace(/^"|"$/g,'').replace(/""/g,'"'); parts.push(v); i++; }
+    const obj = {}; headers.forEach((h,i)=>{
+      const raw = parts[i] ?? '';
+      const n = Number(raw);
+      if(raw === '') obj[h] = null;
+      else if(!isNaN(n) && raw.trim()!=='') obj[h] = n;
+      else if(['true','false'].includes(String(raw).toLowerCase())) obj[h] = String(raw).toLowerCase()==='true';
+      else obj[h]=raw;
     });
-    return obj;
-  });
-}
-
-
-
-function findKeyInsensitive(obj, candidates){
-  const keys = Object.keys(obj);
-  for(const c of candidates){
-    const hit = keys.find(k => k.toLowerCase() === c.toLowerCase());
-    if(hit) return hit;
+    out.push(obj);
   }
-  return null;
-}
-function normalizeLatLon(rows){
-  if(!rows || !rows.length) return { latK: null, lonK: null };
-  const sample = rows[0];
-  const latK = AppState.mapping.latitude || findKeyInsensitive(sample, ['latitude','lat','y','koord_y','breedtegraad']);
-  const lonK = AppState.mapping.longitude || findKeyInsensitive(sample, ['longitude','lon','lng','x','koord_x','lengtegraad']);
-  rows.forEach(r => {
-    if(latK && typeof r[latK] === 'string' && /^-?\d+,\d+$/.test(r[latK])) r[latK] = Number(r[latK].replace(',','.'));
-    if(lonK && typeof r[lonK] === 'string' && /^-?\d+,\d+$/.test(r[lonK])) r[lonK] = Number(r[lonK].replace(',','.'));
-  });
-  return { latK, lonK };
+  return out;
 }
 
 /** Router */
@@ -2606,98 +2497,26 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 /** Dropdown filters */
 const FixedFilters = { gemeente:null, sportbond:null, sport:null, doelgroep:null };
-
-function buildDropdownFilters(){
-  const bar = document.getElementById('filters'); if(!bar) return;
-  bar.innerHTML = '';
-
-  if(!AppState.filters) AppState.filters = {};
-  const F = AppState.filters;
-  F.msGemeente = F.msGemeente || new Set();
-  F.msSport = F.msSport || new Set();
-  F.msImpact = F.msImpact || new Set();
-  F.msType = F.msType || new Set();
-
-  const rows = Array.isArray(AppState.rows)? AppState.rows : [];
-
-  const optGemeente = Array.from(new Set(rows.map(r => (r.gemeente||'').toString().trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'nl'));
-  const optSport = Array.from(new Set(rows.map(r => (r.sport||'').toString().trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'nl'));
-  const optImpact = ['0-4 jaar','4-12 jaar','Jongeren','Volwassenen','Senioren','Aangepast Sporten'];
-  const optType = (function(){
-    const present = Array.from(new Set(rows.map(getProviderType)));
-    const base = ['Sportaanbieder non-profit','Sportaanbieder profit'];
-    const merged = Array.from(new Set([...present, ...base]));
-    return merged;
-  })();
-
-  const wrap = document.createElement('div');
-  wrap.className = 'ms-row';
-
-  const ms1 = createMultiSelect({id:'msGemeente', label:'Gemeentes', options: optGemeente, selected: F.msGemeente, onChange: ()=>applyDropdownFilters()});
-  const ms2 = createMultiSelect({id:'msSport', label:'Sport', options: optSport, selected: F.msSport, onChange: ()=>applyDropdownFilters()});
-  const ms3 = createMultiSelect({id:'msImpact', label:'Impactgebied', options: optImpact, selected: F.msImpact, onChange: ()=>applyDropdownFilters()});
-  const ms4 = createMultiSelect({id:'msType', label:'Type aanbieder', options: optType, selected: F.msType, onChange: ()=>applyDropdownFilters()});
-
-  wrap.appendChild(ms1); wrap.appendChild(ms2); wrap.appendChild(ms3); wrap.appendChild(ms4);
-
-  const clear = document.createElement('button');
-  clear.className = 'btn btn-ghost';
-  clear.textContent = 'Wis filters';
-  clear.addEventListener('click', ()=>{
-    F.msGemeente.clear(); F.msSport.clear(); F.msImpact.clear(); F.msType.clear();
-    buildDropdownFilters();
-    applyDropdownFilters();
-  });
-
-  const clearWrap = document.createElement('div');
-  clearWrap.className = 'ms-actions';
-  clearWrap.appendChild(clear);
-
-  bar.appendChild(wrap);
-  bar.appendChild(clearWrap);
-}
-);
+\1 try{
+  const src = AppState.rows.length ? AppState.rows : DummyRows;
+  const setSel = (id, field)=>{
+    const el = document.getElementById(id); if(!el) return;
+    const keep = el.value;
+    el.innerHTML=''; const a=document.createElement('option'); a.value=''; a.textContent='(Alle)'; el.appendChild(a);
+    uniqueValues(src, field).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o); });
     if(keep && Array.from(el.options).some(o=>o.value===keep)) el.value=keep;
   };
   setSel('ff_gemeente','gemeente'); setSel('ff_sportbond','sportbond'); setSel('ff_sport','sport'); setSel('ff_doelgroep','doelgroep');
 }
-
 function applyDropdownFilters(){
-  const rows = Array.isArray(AppState.rows)? AppState.rows : [];
-  const F = AppState.filters || {};
-  const selG = F.msGemeente ? Array.from(F.msGemeente) : [];
-  const selS = F.msSport ? Array.from(F.msSport) : [];
-  const selI = F.msImpact ? Array.from(F.msImpact) : [];
-  const selT = F.msType ? Array.from(F.msType) : [];
-
-  function matchRow(r){
-    if(selG.length>0){
-      const g = (r.gemeente||'').toString().trim();
-      if(!selG.includes(g)) return false;
-    }
-    if(selS.length>0){
-      const s = (r.sport||'').toString().trim();
-      if(!selS.includes(s)) return false;
-    }
-    if(selI.length>0){
-      const labs = getRowImpactLabels(r);
-      const ok = selI.some(x => labs.includes(x));
-      if(!ok) return false;
-    }
-    if(selT.length>0){
-      const t = getProviderType(r);
-      if(!selT.includes(t)) return false;
-    }
-    return true;
-  }
-
-  AppState.filtered = rows.filter(matchRow);
-
-  if(typeof renderGrid==='function') renderGrid();
-  if(typeof renderList==='function') renderList();
-  if(typeof updateKpiTitle==='function') updateKpiTitle();
-  if(window.__mapRerender){ try{ window.__mapRerender(); }catch(e){} }
+  const src = AppState.rows.length ? AppState.rows : DummyRows;
+  AppState.filtered = src.filter(r => (!FixedFilters.gemeente || r.gemeente===FixedFilters.gemeente)
+    && (!FixedFilters.sportbond || r.sportbond===FixedFilters.sportbond)
+    && (!FixedFilters.sport || r.sport===FixedFilters.sport)
+    && (!FixedFilters.doelgroep || r.doelgroep===FixedFilters.doelgroep));
 }
+
+
 function titleSuffix(){
   const parts = [];
   if(FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
@@ -2716,15 +2535,9 @@ function titleSuffix(){
   if(FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
   return parts.length ? ' - ' + parts.join(' - ') : '';
 }
-
 function updateKpiTitle(){
-  const el = document.getElementById('kpiTitle'); if(!el) return;
-  const F = AppState.filters || {};
-  const bits = ['Kerncijfers'];
-  function add(set){ if(set && set.size>0) bits.push(...Array.from(set).map(v=>String(v))); }
-  add(F.msGemeente); add(F.msSport); add(F.msImpact); add(F.msType);
-  el.textContent = bits.join(' - ');
-}
+  const el = document.getElementById('kpiTitle');
+  if(el){ el.textContent = 'Kerncijfers' + titleSuffix(); }
 }
 
 /** Dashboard */
@@ -2737,7 +2550,7 @@ async function loadSelectedFile(){
     const data = await file.arrayBuffer(); const wb = XLSX.read(data,{type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]];
     AppState.rows = XLSX.utils.sheet_to_json(ws,{defval:null});
   }
-  AppState.schema = inferSchema(AppState.rows); AppState.usingDummy = false; AppState.filters=[]; normalizeLatLon(AppState.rows); applyDropdownFilters(); buildDropdownFilters(); navigate(); updateKpiTitle(); renderList && renderList();
+  AppState.schema = inferSchema(AppState.rows); AppState.usingDummy = false; AppState.filters=[]; applyDropdownFilters(); buildDropdownFilters(); navigate(); updateKpiTitle();
 }
 
 function renderDashboard(mount){
@@ -2752,13 +2565,13 @@ function renderDashboard(mount){
   const pick = document.createElement('button'); pick.className='btn'; pick.textContent='Kies bestand'; pick.addEventListener('click', ()=> document.getElementById('fileInput').click());
   const load = document.createElement('button'); load.className='btn'; load.textContent='Laad dataset'; load.addEventListener('click', loadSelectedFile);
   const useDummy = document.createElement('button'); useDummy.className='btn btn-ghost'; useDummy.textContent='Gebruik dummy data';
-  useDummy.addEventListener('click', ()=>{ AppState.rows = DummyRows.slice(); AppState.schema=inferSchema(AppState.rows); AppState.usingDummy=true; normalizeLatLon(AppState.rows); buildDropdownFilters(); applyDropdownFilters(); navigate(); });
+  useDummy.addEventListener('click', ()=>{ AppState.rows = DummyRows.slice(); AppState.schema=inferSchema(AppState.rows); AppState.usingDummy=true; buildDropdownFilters(); applyDropdownFilters(); navigate(); });
   const name = document.createElement('div'); name.style.marginLeft='8px'; name.style.color='var(--muted)'; name.textContent = AppState.datasetName || 'Geen dataset geladen';
   ctl.appendChild(pick); ctl.appendChild(load); ctl.appendChild(useDummy); ctl.appendChild(name);
   card1.appendChild(ctl);
 
   const filterRow = document.createElement('div'); filterRow.className='filter-row';
-  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); updateKpiTitle(); renderGrid(); renderList(); }); g.appendChild(l); g.appendChild(s); return g; };
+  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); updateKpiTitle(); renderGrid(); }); g.appendChild(l); g.appendChild(s); return g; };
   filterRow.appendChild(mk('Gemeente','ff_gemeente'));
   filterRow.appendChild(mk('Sportbond','ff_sportbond'));
   filterRow.appendChild(mk('Sport','ff_sport'));
@@ -2766,7 +2579,7 @@ function renderDashboard(mount){
   card1.appendChild(filterRow);
 
   const reset = document.createElement('button'); reset.className='btn btn-ghost'; reset.textContent='Wis filters';
-  reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); updateKpiTitle(); renderGrid(); renderList(); });
+  reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); updateKpiTitle(); renderGrid(); });
   card1.appendChild(reset);
 
   mount.appendChild(card1);
@@ -2777,20 +2590,9 @@ function renderDashboard(mount){
   const grid = document.createElement('div'); grid.className='tile-grid fixed-4'; grid.id='kpiGrid'; card2.appendChild(grid);
   mount.appendChild(card2);
 
-  // Selection list card
-  const card3 = document.createElement('div'); card3.className='card';
-  const titleRow = document.createElement('div'); titleRow.className='section-title-row';
-const t3 = document.createElement('div'); t3.className='section-title'; t3.id='selTitle'; t3.textContent='Selectie';
-const dl = document.createElement('button'); dl.className='btn'; dl.id='btnExportSel'; dl.textContent='Download selectie (CSV)'; dl.addEventListener('click', exportSelectionCSV);
-const dlx = document.createElement('button'); dlx.className='btn btn-ghost'; dlx.id='btnExportSelX'; dlx.textContent='Download selectie (XLSX)'; dlx.addEventListener('click', exportSelectionXLSX);
-titleRow.appendChild(t3); titleRow.appendChild(dlx); titleRow.appendChild(dl); card3.appendChild(titleRow);
-  const list = document.createElement('div'); list.className='sel-list'; list.id='selList'; card3.appendChild(list);
-  mount.appendChild(card3);
-
   buildDropdownFilters();
   updateKpiTitle();
   renderGrid();
-  renderList();
 
   function renderGrid(){
     updateKpiTitle();
@@ -2839,26 +2641,6 @@ titleRow.appendChild(t3); titleRow.appendChild(dlx); titleRow.appendChild(dl); c
   }
 }
 
-  function renderList(){
-    applyDropdownFilters();
-    const rows = AppState.filtered || [];
-    const listEl = document.getElementById('selList');
-    const titleEl = document.getElementById('selTitle');
-    if(!listEl) return;
-    listEl.innerHTML = '';
-    if(titleEl){ titleEl.textContent = `Selectie (${rows.length})`; }
-    if(!rows.length){
-      const empty = document.createElement('div'); empty.className='sel-empty'; empty.textContent='Geen resultaten met deze filters'; listEl.appendChild(empty);
-      return;
-    }
-    rows.forEach(r => {
-      const name = (r.naam ?? '').toString().trim();
-      const item = document.createElement('div'); item.className='sel-item';
-      item.textContent = name || '(naam onbekend)';
-      listEl.appendChild(item);
-    });
-  }
-
 /** Compare */
 function renderCompare(mount){
   const card = document.createElement('div'); card.className='card';
@@ -2884,7 +2666,6 @@ function renderMap(mount){
   const title = document.createElement('div'); title.className='section-title'; title.id='mapTitle'; title.textContent='Kaart' + titleSuffix(); wrapper.appendChild(title);
   const mapCount = document.createElement('div'); mapCount.className='sub'; mapCount.id='mapCount'; wrapper.appendChild(mapCount);
   const mapWrap = document.createElement('div'); mapWrap.className='tile equal'; mapWrap.style.height='64vh'; mapWrap.id='map'; wrapper.appendChild(mapWrap);
-    const hard = document.createElement('button'); hard.className='btn btn-ghost'; hard.textContent='Volledige reset (cache & instellingen)'; hard.addEventListener('click', ()=>{ localStorage.clear(); location.reload(); }); wrapper.appendChild(hard);
   mount.appendChild(wrapper);
 
   // Ensure data exists and apply active dropdown filters from dashboard
@@ -2907,113 +2688,9 @@ function renderMap(mount){
   }
 
   const markers = [];
-  pts.forEach(p =>{ const m=L.marker([p.lat,p.lon]).addTo(map); m.bindPopup(buildPopup(p.row), {maxWidth: 360}); markers.push(m); });
+  pts.forEach(p =>{ const m=L.marker([p.lat,p.lon]).addTo(map); m.bindPopup(`<strong>${p.name}</strong>`); markers.push(m); });
   const group = new L.featureGroup(markers);
   map.fitBounds(group.getBounds().pad(0.25));
-}
-
-
-/** Popup content for map markers: show all available fields for the club */
-function buildPopup(row){
-  const order = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
-  const seen = new Set();
-  const rows = [];
-  // Known fields first in a friendly order
-  order.forEach(k => {
-    if(row[k] !== undefined && row[k] !== null && row[k] !== ''){
-      let val = row[k];
-      if(k === 'contributie' && typeof val === 'number'){ val = fmtCurrency(val); }
-      if((k === 'latitude' || k === 'longitude') && typeof val === 'number'){ val = Number(val).toFixed(5); }
-      rows.push([k, val]); seen.add(k);
-    }
-  });
-  // Then any other fields dynamically
-  Object.keys(row).forEach(k => {
-    if(!seen.has(k) && row[k] !== null && row[k] !== ''){
-      let val = row[k];
-      if(typeof val === 'number' && !Number.isInteger(val)){
-        val = Number(val).toLocaleString('nl-NL', {maximumFractionDigits:2});
-      }
-      rows.push([k, val]);
-    }
-  });
-  // Derived metric example
-  if(row.leden && row.vrijwilligers){
-    const per100 = Math.round((row.vrijwilligers / row.leden) * 1000) / 10;
-    rows.push(['vrijwilligers_per_100_leden', per100]);
-  }
-  // Build HTML
-  const title = (row.naam ?? 'Vereniging');
-  const items = rows.map(([k,v]) => `<div class="pp-row"><div class="pp-k">${k}</div><div class="pp-v">${v}</div></div>`).join('');
-  return `<div class="pp-wrap">
-    <div class="pp-title">${title}</div>
-    <div class="pp-list">${items}</div>
-  </div>`;
-}
-
-
-/** --- Export helpers --- */
-function slug(v){
-  return String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').replace(/^_+|_+$/g,'').toLowerCase();
-}
-function csvEscape(val){
-  if(val===null||val===undefined) return '';
-  const s = String(val);
-  if(/[",\n]/.test(s)){
-    return '"' + s.replace(/"/g,'""') + '"';
-  }
-  return s;
-}
-function buildCSV(rows){
-  if(!rows || !rows.length){
-    return 'naam,gemeente,sportbond,sport,doelgroep,leden,vrijwilligers,contributie,latitude,longitude';
-  }
-  const pref = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
-  const keySet = new Set();
-  rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
-  const rest = Array.from(keySet).filter(k => !pref.includes(k));
-  const headers = pref.concat(rest);
-  const headerLine = headers.join(',');
-  const lines = rows.map(r => headers.map(h => csvEscape(r[h])).join(','));
-  return [headerLine].concat(lines).join('\r\n');
-}
-function downloadBlob(content, filename, type='text/csv;charset=utf-8;'){
-  const blob = new Blob([content], {type});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
-}
-function getFilteredRowsFallback(){
-  if(Array.isArray(AppState.filtered)) return AppState.filtered;
-  const rows = Array.isArray(AppState.rows) && AppState.rows.length ? AppState.rows : (typeof DummyRows!=='undefined'? DummyRows: []);
-  // Apply FixedFilters if present
-  const f = (FixedFilters||{});
-  return rows.filter(r =>
-    (!f.gemeente || r.gemeente===f.gemeente) &&
-    (!f.sportbond || r.sportbond===f.sportbond) &&
-    (!f.sport || r.sport===f.sport) &&
-    (!f.doelgroep || r.doelgroep===f.doelgroep)
-  );
-}
-function exportSelectionCSV(){
-  try{
-    if(typeof applyDropdownFilters==='function'){ applyDropdownFilters(); }
-  }catch(e){ /* ignore */ }
-  const rows = getFilteredRowsFallback();
-  const parts = [];
-  if(FixedFilters && FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
-  if(FixedFilters && FixedFilters.sportbond) parts.push(FixedFilters.sportbond);
-  if(FixedFilters && FixedFilters.sport) parts.push(FixedFilters.sport);
-  if(FixedFilters && FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
-  const d = new Date();
-  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  const fname = `selectie_${y}-${m}-${dd}` + (parts.length?`_${slug(parts.join('_'))}`:'') + `.csv`;
-  const csv = buildCSV(rows);
-  downloadBlob(csv, fname);
 }
 
 /** Help */
@@ -3034,40 +2711,13 @@ function renderSettings(mount){
   const save = document.createElement('button'); save.className='btn'; save.textContent='Opslaan';
   save.addEventListener('click', ()=>{ document.documentElement.style.setProperty('--brand', inBrand.value); document.documentElement.style.setProperty('--accent', inAccent.value); AppState.theme.brand=inBrand.value; AppState.theme.accent=inAccent.value; saveState(); alert('Instellingen opgeslagen ✅'); });
   theme.append('Merk-kleur', inBrand, 'Accent-kleur', inAccent, save); wrapper.appendChild(theme);
-    const hard = document.createElement('button'); hard.className='btn btn-ghost'; hard.textContent='Volledige reset (cache & instellingen)'; hard.addEventListener('click', ()=>{ localStorage.clear(); location.reload(); }); wrapper.appendChild(hard);
   mount.appendChild(wrapper);
 }
 
 /** Boot */
 navigate();
-
-function exportSelectionXLSX(){
-  try{ if(typeof applyDropdownFilters==='function'){ applyDropdownFilters(); } }catch(e){}
-  const rows = getFilteredRowsFallback();
-  const pref = ['naam','gemeente','sportbond','sport','doelgroep','leden','vrijwilligers','contributie','latitude','longitude'];
-  const keySet = new Set();
-  rows.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
-  const rest = Array.from(keySet).filter(k => !pref.includes(k));
-  const headers = pref.concat(rest);
-  const data = [headers].concat(rows.map(r => headers.map(h => r[h] ?? '')));
-  if(typeof XLSX === 'undefined' || !XLSX || !XLSX.utils){
-    // Fallback to CSV if SheetJS not loaded
-    const csv = data.map(row => row.map(v => (v==null?'':String(v).replace(/"/g,'""'))).map(v => /[",\n]/.test(v)?`"${v}"`:v).join(',')).join('\r\n');
-    const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-    const fname = `selectie_${y}-${m}-${dd}.csv`;
-    downloadBlob(csv, fname, 'text/csv;charset=utf-8;'); return;
-  }
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Selectie");
-  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-  const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  const parts = [];
-  if(FixedFilters && FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
-  if(FixedFilters && FixedFilters.sportbond) parts.push(FixedFilters.sportbond);
-  if(FixedFilters && FixedFilters.sport) parts.push(FixedFilters.sport);
-  if(FixedFilters && FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
-  const fname = `selectie_${y}-${m}-${dd}` + (parts.length?`_${slug(parts.join('_'))}`:'') + `.xlsx`;
-  downloadBlob(wbout, fname, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+function ensureFiltersInit(){
+  if(!window.AppState) window.AppState = {};
+  if(!AppState.filters) AppState.filters = { msGemeente:new Set(), msSport:new Set(), msImpact:new Set(), msType:new Set() };
 }
-
+document.addEventListener('DOMContentLoaded', ()=>{ try{ ensureFiltersInit(); }catch(e){ console.error(e);} });
