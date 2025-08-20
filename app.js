@@ -2647,18 +2647,6 @@ function buildDropdownFilters(){
       buildDropdownFilters();
     });
 
-    const btnClear = document.createElement('button');
-    btnClear.className = 'btn btn-ghost';
-    btnClear.textContent = 'Wis filters';
-    btnClear.addEventListener('click', ()=>{
-      ['msGemeente','msSport','msImpact','msType'].forEach(k=>{ SF[k].clear(); if(AppState.filters[k]) AppState.filters[k].clear(); });
-      applyDropdownFilters();
-      buildDropdownFilters();
-    });
-
-    actions.appendChild(btnApply);
-    actions.appendChild(btnClear);
-
     bar.appendChild(row);
     bar.appendChild(actions);
   }catch(err){ console.error('buildDropdownFilters error', err); }
@@ -2751,10 +2739,7 @@ function renderDashboard(mount){
   const ctl = document.createElement('div'); ctl.className='flex';
   const pick = document.createElement('button'); pick.className='btn'; pick.textContent='Kies bestand'; pick.addEventListener('click', ()=> document.getElementById('fileInput').click());
   const load = document.createElement('button'); load.className='btn'; load.textContent='Laad dataset'; load.addEventListener('click', loadSelectedFile);
-  const useDummy = document.createElement('button'); useDummy.className='btn btn-ghost'; useDummy.textContent='Gebruik dummy data';
-  useDummy.addEventListener('click', ()=>{ AppState.rows = DummyRows.slice(); AppState.schema=inferSchema(AppState.rows); AppState.usingDummy=true; normalizeLatLon(AppState.rows); buildDropdownFilters(); applyDropdownFilters(); navigate(); });
-  const name = document.createElement('div'); name.style.marginLeft='8px'; name.style.color='var(--muted)'; name.textContent = AppState.datasetName || 'Geen dataset geladen';
-  ctl.appendChild(pick); ctl.appendChild(load); ctl.appendChild(useDummy); ctl.appendChild(name);
+  ctl.appendChild(name);
   card1.appendChild(ctl);
 
   
