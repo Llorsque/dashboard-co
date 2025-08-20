@@ -2,6 +2,56 @@
 function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 function setVar(name, val){ document.documentElement.style.setProperty(name, val); }
 
+
+/* === Multi-select (Gemeentes, Sport, Impact, Type) === */
+function getRowImpactLabels(row){
+  const labs = [];
+  if(Number(row.impact_0_4)===1) labs.push('0-4 jaar');
+  if(Number(row.impact_4_12)===1) labs.push('4-12 jaar');
+  if(Number(row.impact_jongeren)===1) labs.push('Jongeren');
+  if(Number(row.impact_volwassenen)===1) labs.push('Volwassenen');
+  if(Number(row.impact_senioren)===1) labs.push('Senioren');
+  if(Number(row.impact_aangepast)===1) labs.push('Aangepast Sporten');
+  return labs;
+}
+function normalizeProviderType(v){
+  const s = String(v||'').toLowerCase();
+  if(!s) return 'Sportaanbieder non-profit';
+  if(s.includes('profit') && !s.includes('non')) return 'Sportaanbieder profit';
+  if(s.includes('non') || s.includes('vereniging') || s.includes('stichting')) return 'Sportaanbieder non-profit';
+  if(s.includes('club')) return 'Sportaanbieder non-profit';
+  return s.includes('profit') ? 'Sportaanbieder profit' : 'Sportaanbieder non-profit';
+}
+function getProviderType(row){
+  const v = row.type_aanbieder ?? row.aanbieder_type ?? row.type ?? row.soort ?? '';
+  return normalizeProviderType(v);
+}
+function createMultiSelect({label, options, selected, onChange}){
+  const wrap = document.createElement('div');
+  wrap.className = 'ms-wrap';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'ms-btn';
+  const setTitle = () => { const n = selected.size; btn.textContent = n>0 ? `${label} (${n})` : `${label} (Alle)`; };
+  setTitle();
+  btn.addEventListener('click', (e)=>{ e.stopPropagation(); wrap.classList.toggle('open'); });
+  const panel = document.createElement('div'); panel.className = 'ms-panel';
+  const list = document.createElement('div'); list.className = 'ms-list';
+
+  options.forEach(opt => {
+    const L = document.createElement('label'); L.className = 'ms-item';
+    const cb = document.createElement('input'); cb.type='checkbox'; cb.value=opt; cb.checked = selected.has(opt);
+    cb.addEventListener('change', ()=>{ if(cb.checked) selected.add(opt); else selected.delete(opt); setTitle(); onChange && onChange(); });
+    const span = document.createElement('span'); span.textContent = opt;
+    L.appendChild(cb); L.appendChild(span);
+    list.appendChild(L);
+  });
+
+  panel.appendChild(list);
+  wrap.appendChild(btn); wrap.appendChild(panel);
+  document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) wrap.classList.remove('open'); });
+  return wrap;
+}
+
 const AppState = {
   rows: [],
   filtered: [],
@@ -2539,26 +2589,88 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 /** Dropdown filters */
 const FixedFilters = { gemeente:null, sportbond:null, sport:null, doelgroep:null };
+
 function buildDropdownFilters(){
-  const src = AppState.rows.length ? AppState.rows : DummyRows;
-  const setSel = (id, field)=>{
-    const el = document.getElementById(id); if(!el) return;
-    const keep = el.value;
-    el.innerHTML=''; const a=document.createElement('option'); a.value=''; a.textContent='(Alle)'; el.appendChild(a);
-    uniqueValues(src, field).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; el.appendChild(o); });
+  const bar = document.getElementById('filters'); if(!bar) return;
+  bar.innerHTML = '';
+
+  if(!AppState.filters) AppState.filters = {};
+  const F = AppState.filters;
+  F.msGemeente = F.msGemeente || new Set();
+  F.msSport = F.msSport || new Set();
+  F.msImpact = F.msImpact || new Set();
+  F.msType = F.msType || new Set();
+
+  const rows = Array.isArray(AppState.rows) ? AppState.rows : [];
+  const optGemeente = Array.from(new Set(rows.map(r => (r.gemeente||'').toString().trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'nl'));
+  const optSport = Array.from(new Set(rows.map(r => (r.sport||'').toString().trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'nl'));
+  const optImpact = ['0-4 jaar','4-12 jaar','Jongeren','Volwassenen','Senioren','Aangepast Sporten'];
+  const optType = (function(){
+    const present = Array.from(new Set(rows.map(getProviderType)));
+    const base = ['Sportaanbieder non-profit','Sportaanbieder profit'];
+    return Array.from(new Set([...base, ...present]));
+  })();
+
+  const row = document.createElement('div');
+  row.className = 'ms-row';
+  row.appendChild(createMultiSelect({label:'Gemeentes', options: optGemeente, selected: F.msGemeente, onChange: ()=>applyDropdownFilters()}));
+  row.appendChild(createMultiSelect({label:'Sport', options: optSport, selected: F.msSport, onChange: ()=>applyDropdownFilters()}));
+  row.appendChild(createMultiSelect({label:'Impactgebied', options: optImpact, selected: F.msImpact, onChange: ()=>applyDropdownFilters()}));
+  row.appendChild(createMultiSelect({label:'Type aanbieder', options: optType, selected: F.msType, onChange: ()=>applyDropdownFilters()}));
+
+  const clear = document.createElement('button');
+  clear.className = 'btn btn-ghost';
+  clear.textContent = 'Wis filters';
+  clear.addEventListener('click', ()=>{
+    F.msGemeente.clear(); F.msSport.clear(); F.msImpact.clear(); F.msType.clear();
+    buildDropdownFilters(); applyDropdownFilters();
+  });
+
+  const actions = document.createElement('div'); actions.className = 'ms-actions'; actions.appendChild(clear);
+
+  bar.appendChild(row); bar.appendChild(actions);
+}
+);
     if(keep && Array.from(el.options).some(o=>o.value===keep)) el.value=keep;
   };
   setSel('ff_gemeente','gemeente'); setSel('ff_sportbond','sportbond'); setSel('ff_sport','sport'); setSel('ff_doelgroep','doelgroep');
 }
+
 function applyDropdownFilters(){
-  const src = AppState.rows.length ? AppState.rows : DummyRows;
-  AppState.filtered = src.filter(r => (!FixedFilters.gemeente || r.gemeente===FixedFilters.gemeente)
-    && (!FixedFilters.sportbond || r.sportbond===FixedFilters.sportbond)
-    && (!FixedFilters.sport || r.sport===FixedFilters.sport)
-    && (!FixedFilters.doelgroep || r.doelgroep===FixedFilters.doelgroep));
+  const rows = Array.isArray(AppState.rows) ? AppState.rows : [];
+  const F = AppState.filters || {};
+  const selG = F.msGemeente ? Array.from(F.msGemeente) : [];
+  const selS = F.msSport ? Array.from(F.msSport) : [];
+  const selI = F.msImpact ? Array.from(F.msImpact) : [];
+  const selT = F.msType ? Array.from(F.msType) : [];
+
+  function matchRow(r){
+    if(selG.length>0){
+      const g = (r.gemeente||'').toString().trim();
+      if(!selG.includes(g)) return false;
+    }
+    if(selS.length>0){
+      const s = (r.sport||'').toString().trim();
+      if(!selS.includes(s)) return false;
+    }
+    if(selI.length>0){
+      const labs = getRowImpactLabels(r);
+      if(!selI.some(x=>labs.includes(x))) return false;
+    }
+    if(selT.length>0){
+      const t = getProviderType(r);
+      if(!selT.includes(t)) return false;
+    }
+    return true;
+  }
+
+  AppState.filtered = rows.filter(matchRow);
+
+  if(typeof renderGrid==='function') renderGrid();
+  if(typeof renderList==='function') renderList();
+  if(typeof updateKpiTitle==='function') updateKpiTitle();
+  if(window.__mapRerender){ try{ window.__mapRerender(); }catch(e){} }
 }
-
-
 function titleSuffix(){
   const parts = [];
   if(FixedFilters.gemeente) parts.push(FixedFilters.gemeente);
@@ -2577,9 +2689,15 @@ function titleSuffix(){
   if(FixedFilters.doelgroep) parts.push(FixedFilters.doelgroep);
   return parts.length ? ' - ' + parts.join(' - ') : '';
 }
+
 function updateKpiTitle(){
-  const el = document.getElementById('kpiTitle');
-  if(el){ el.textContent = 'Kerncijfers' + titleSuffix(); }
+  const el = document.getElementById('kpiTitle'); if(!el) return;
+  const F = AppState.filters || {};
+  const bits = ['Kerncijfers'];
+  function addSet(set){ if(set && set.size>0) bits.push(...Array.from(set)); }
+  addSet(F.msGemeente); addSet(F.msSport); addSet(F.msImpact); addSet(F.msType);
+  el.textContent = bits.join(' - ');
+}
 }
 
 /** Dashboard */
