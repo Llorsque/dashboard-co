@@ -89,3 +89,7 @@ input[type=file]{display:none}
 .ms-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer}
 .ms-item:hover{background:#f4f6f9}
 .ms-actions{display:flex;align-items:center}
+
+.btn.btn-primary{background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:12px;padding:10px 14px;box-shadow:var(--shadow,0 1px 2px rgba(0,0,0,.06));font-weight:600}
+.btn.btn-primary:hover{filter:brightness(0.95)}
+.ms-actions{display:flex;gap:10px;align-items:center;margin-top:8px}

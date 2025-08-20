@@ -26,7 +26,7 @@ function getProviderType(row){
   const v = row.type_aanbieder ?? row.aanbieder_type ?? row.type ?? row.soort ?? '';
   return normalizeProviderType(v);
 }
-function createMultiSelect({label, options, selected, onChange}){
+function createMultiSelect({label, options, selected}){
   const wrap = document.createElement('div');
   wrap.className = 'ms-wrap';
   const btn = document.createElement('button');
@@ -40,7 +40,7 @@ function createMultiSelect({label, options, selected, onChange}){
   options.forEach(opt => {
     const L = document.createElement('label'); L.className = 'ms-item';
     const cb = document.createElement('input'); cb.type='checkbox'; cb.value=opt; cb.checked = selected.has(opt);
-    cb.addEventListener('change', ()=>{ if(cb.checked) selected.add(opt); else selected.delete(opt); setTitle(); onChange && onChange(); });
+    cb.addEventListener('change', ()=>{ if(cb.checked) selected.add(opt); else selected.delete(opt); setTitle(); /* staged only; apply on button */ });
     const span = document.createElement('span'); span.textContent = opt;
     L.appendChild(cb); L.appendChild(span);
     list.appendChild(L);
@@ -2590,11 +2590,87 @@ document.addEventListener('DOMContentLoaded', ()=>{
 /** Dropdown filters */
 const FixedFilters = { gemeente:null, sportbond:null, sport:null, doelgroep:null };
 
-function buildDropdownFilters(){
-  const bar = document.getElementById('filters'); if(!bar) return;
-  bar.innerHTML = '';
 
-  if(!AppState.filters) AppState.filters = {};
+function buildDropdownFilters(){
+  try{
+    const bar = document.getElementById('filters'); if(!bar) return;
+    bar.innerHTML = '';
+
+    // Kill duplicate 'Wis filters' outside this container
+    document.querySelectorAll('button').forEach(b=>{
+      if(b.textContent && b.textContent.trim()==='Wis filters' && !bar.contains(b)){
+        b.remove();
+      }
+    });
+
+    if(!AppState.filters) AppState.filters = {};
+    const AF = AppState.filters;
+    AF.msGemeente = AF.msGemeente || new Set();
+    AF.msSport = AF.msSport || new Set();
+    AF.msImpact = AF.msImpact || new Set();
+    AF.msType = AF.msType || new Set();
+
+    AppState.stagedFilters = {
+      msGemeente: new Set(AF.msGemeente),
+      msSport: new Set(AF.msSport),
+      msImpact: new Set(AF.msImpact),
+      msType: new Set(AF.msType)
+    };
+    const SF = AppState.stagedFilters;
+
+    const rows = Array.isArray(AppState.rows) ? AppState.rows : [];
+    const optGemeente = Array.from(new Set(rows.map(r => (r.gemeente||'').toString().trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'nl'));
+    const optSport = Array.from(new Set(rows.map(r => (r.sport||'').toString().trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'nl'));
+    const optImpact = ['0-4 jaar','4-12 jaar','Jongeren','Volwassenen','Senioren','Aangepast Sporten'];
+    const optType = (function(){
+      const present = Array.from(new Set(rows.map(getProviderType)));
+      const base = ['Sportaanbieder non-profit','Sportaanbieder profit'];
+      return Array.from(new Set([...base, ...present]));
+    })();
+
+    const row = document.createElement('div');
+    row.className = 'ms-row';
+    row.appendChild(createMultiSelect({label:'Gemeentes', options: optGemeente, selected: SF.msGemeente}));
+    row.appendChild(createMultiSelect({label:'Sport', options: optSport, selected: SF.msSport}));
+    row.appendChild(createMultiSelect({label:'Impactgebied', options: optImpact, selected: SF.msImpact}));
+    row.appendChild(createMultiSelect({label:'Type aanbieder', options: optType, selected: SF.msType}));
+
+    // Single actions block
+    const actions = document.createElement('div');
+    actions.id = 'filters-actions';
+    actions.className = 'ms-actions';
+
+    const btnApply = document.createElement('button');
+    btnApply.className = 'btn btn-primary';
+    btnApply.textContent = 'Filters toepassen';
+    btnApply.addEventListener('click', ()=>{
+      AppState.filters = {
+        msGemeente: new Set(SF.msGemeente),
+        msSport: new Set(SF.msSport),
+        msImpact: new Set(SF.msImpact),
+        msType: new Set(SF.msType)
+      };
+      applyDropdownFilters();
+      buildDropdownFilters();
+    });
+
+    const btnClear = document.createElement('button');
+    btnClear.className = 'btn btn-ghost';
+    btnClear.textContent = 'Wis filters';
+    btnClear.addEventListener('click', ()=>{
+      ['msGemeente','msSport','msImpact','msType'].forEach(k=>{ SF[k].clear(); if(AppState.filters[k]) AppState.filters[k].clear(); });
+      applyDropdownFilters();
+      buildDropdownFilters();
+    });
+
+    actions.appendChild(btnApply);
+    actions.appendChild(btnClear);
+
+    bar.appendChild(row);
+    bar.appendChild(actions);
+  }catch(err){ console.error('buildDropdownFilters error', err); }
+}
+;
   const F = AppState.filters;
   F.msGemeente = F.msGemeente || new Set();
   F.msSport = F.msSport || new Set();
