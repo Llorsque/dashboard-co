@@ -2730,15 +2730,12 @@ function renderDashboard(mount){
   ctl.appendChild(pick); ctl.appendChild(load); ctl.appendChild(useDummy); ctl.appendChild(name);
   card1.appendChild(ctl);
 
-  const filterRow = document.createElement('div'); filterRow.className='filter-row';
-  const mk = (label,id)=>{ const g=document.createElement('div'); g.className='group'; const l=document.createElement('div'); l.className='label-sm'; l.textContent=label; const s=document.createElement('select'); s.id=id; s.addEventListener('change',()=>{ FixedFilters[id.split('_')[1]]= s.value||null; applyDropdownFilters(); updateKpiTitle(); renderGrid(); renderList(); }); g.appendChild(l); g.appendChild(s); return g; };
-  filterRow.appendChild(mk('Gemeente','ff_gemeente'));
-  filterRow.appendChild(mk('Sportbond','ff_sportbond'));
-  filterRow.appendChild(mk('Sport','ff_sport'));
-  filterRow.appendChild(mk('Doelgroep','ff_doelgroep'));
-  card1.appendChild(filterRow);
-
-  const reset = document.createElement('button'); reset.className='btn btn-ghost'; reset.textContent='Wis filters';
+  
+  // Multi-select filters row (replaces legacy single-selects)
+  const msHost = document.createElement('div');
+  msHost.id = 'filters';
+  card1.appendChild(msHost);
+const reset = document.createElement('button'); reset.className='btn btn-ghost'; reset.textContent='Wis filters';
   reset.addEventListener('click', ()=>{ Object.keys(FixedFilters).forEach(k=>FixedFilters[k]=null); ['ff_gemeente','ff_sportbond','ff_sport','ff_doelgroep'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';}); applyDropdownFilters(); updateKpiTitle(); renderGrid(); renderList(); });
   card1.appendChild(reset);
 
