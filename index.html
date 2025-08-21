@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sport Fryslân Dashboard</title>
-  <link rel="icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -12,26 +13,33 @@
 <body>
   <div id="app" class="layout">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="bolt">⚡</div>
-        <div class="brand-block">
-          <div class="brand-line-1">Sport Fryslân</div>
-          <div class="brand-line-2">CO Data analyse</div>
-        </div>
-      </div>
+      <div class="brand"><span class="bolt">⚡</span><div class="brand-text"><div class="brand-line-1">Sport Fryslan</div><div class="brand-line-2">CO Data analyse</div></div></div>
       <nav class="nav">
-        <a class="nav-link" href="#/dashboard">🏠 Dashboard</a>
-        <a class="nav-link" href="#/compare">⇄ Vergelijker</a>
-        <a class="nav-link" href="#/map">🗺️ Kaart</a>
-        <a class="nav-link" href="#/help">❓ Uitleg</a>
-        <a class="nav-link" href="#/settings">⚙️ Instellingen</a>
+        <a href="#/dashboard" class="nav-link" data-route="dashboard"><span class="ico">🏠</span><span>Dashboard</span></a>
+        <a href="#/compare" class="nav-link" data-route="compare"><span class="ico">⇄</span><span>Vergelijker</span></a>
+        <a href="#/map" class="nav-link" data-route="map"><span class="ico">🗺️</span><span>Kaart</span></a>
+        <a href="#/help" class="nav-link" data-route="help"><span class="ico">❓</span><span>Uitleg</span></a>
+        <a href="#/settings" class="nav-link" data-route="settings"><span class="ico">⚙️</span><span>Instellingen</span></a>
       </nav>
+      <div class="sidebar-footer">
+        <button id="resetApp" class="btn btn-ghost">Reset app</button>
+      </div>
     </aside>
+
     <main class="main">
-      <header class="topbar">
-        <h1 id="pageTitle">Dashboard</h1>
+      <header class="appbar">
+        <div class="page-title" id="pageTitle">Dashboard</div>
         <div class="avatar" title="Gebruiker"><span>U</span></div>
       </header>
+
+      <!-- (Verborgen toolbar t.b.v. layout-pariteit; functionaliteit gaat via kaart in de eerste card) -->
+      <section class="toolbar hidden" role="region" aria-label="Data en filters">
+        <div class="file-upload">
+          <label for="fileInput" class="btn btn-primary">Upload (.xlsx / .csv)</label>
+          <input id="fileInput" type="file" accept=".xlsx,.csv" />
+          <div id="datasetName" class="dataset-name">Geen dataset geladen</div>
+        </div>
+      </section>
 
       <section id="view" class="content"></section>
 
@@ -39,16 +47,8 @@
     </main>
   </div>
 
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
-
-  <div id="errorOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.86);color:#fff;z-index:9999;padding:24px;overflow:auto">
-    <div style="max-width:960px;margin:0 auto">
-      <h2 style="margin-top:0">⚠️ Fout in de applicatie</h2>
-      <pre id="errorOverlayText" style="white-space:pre-wrap;background:#111827;padding:16px;border-radius:8px;border:1px solid rgba(255,255,255,.1)"></pre>
-      <button id="errorOverlayClose" style="margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid #fff;background:transparent;color:#fff;cursor:pointer">Sluiten</button>
-    </div>
-  </div>
-
 </body>
 </html>
